@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?><project name="Planning de dévloppement Mathias Schumacher" company="" webLink="http://" view-date="2025-11-27" view-index="0" gantt-divider-location="351" resource-divider-location="300" version="3.3.3320" locale="fr_FR">
+<?xml version="1.0" encoding="UTF-8"?><project name="Planning de dévloppement Mathias Schumacher" company="" webLink="http://" view-date="2025-12-05" view-index="0" gantt-divider-location="351" resource-divider-location="300" version="3.3.3320" locale="fr_FR">
     <description/>
     <view zooming-state="default:2" id="gantt-chart">
         <field id="tpd3" name="Nom" width="200" order="0"/>
@@ -57,7 +57,7 @@
         <task id="21" uid="894713aa7cae4d5e993de80fd45b47dc" name="Dévloppement de l'application python" meeting="false" start="2025-11-29" duration="11" complete="100" priority="4" expand="true">
             <depend id="11" type="2" difference="0" hardness="Strong"/>
         </task>
-        <task id="11" uid="edfaddf839ac468bb340e63e9e5e9811" name="Chiffrement Asymetrique + finition script pyrhon" meeting="false" start="2025-12-10" duration="3" complete="0" expand="true">
+        <task id="11" uid="edfaddf839ac468bb340e63e9e5e9811" name="Chiffrement Asymetrique + finition script pyrhon" meeting="false" start="2025-12-10" duration="3" complete="40" expand="true">
             <notes><![CDATA[pour la finition tous ce qui est sur les correction sur les script pour que cela fonctionne et l'ajout des routeur et du script pour le client B (proche du script du client A)]]></notes>
             <depend id="12" type="2" difference="0" hardness="Strong"/>
         </task>
