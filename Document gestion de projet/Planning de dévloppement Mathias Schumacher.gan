@@ -57,29 +57,29 @@
         <task id="21" uid="894713aa7cae4d5e993de80fd45b47dc" name="Dévloppement de l'application python" meeting="false" start="2025-11-29" duration="11" complete="100" priority="4" expand="true">
             <depend id="11" type="2" difference="0" hardness="Strong"/>
         </task>
-        <task id="11" uid="edfaddf839ac468bb340e63e9e5e9811" name="Chiffrement Asymetrique + finition script pyrhon" meeting="false" start="2025-12-10" duration="3" complete="40" expand="true">
+        <task id="11" uid="edfaddf839ac468bb340e63e9e5e9811" name="Chiffrement + finition script pyrhon" meeting="false" start="2025-12-10" duration="2" complete="100" expand="true">
             <notes><![CDATA[pour la finition tous ce qui est sur les correction sur les script pour que cela fonctionne et l'ajout des routeur et du script pour le client B (proche du script du client A)]]></notes>
             <depend id="12" type="2" difference="0" hardness="Strong"/>
         </task>
-        <task id="12" uid="b86d4d20b37240009e809636de2884f3" name="Anonymisation par couches" meeting="false" start="2025-12-13" duration="2" complete="0" expand="true">
+        <task id="12" uid="b86d4d20b37240009e809636de2884f3" name="Anonymisation par couches + ajout de plusieurs routeur" meeting="false" start="2025-12-12" duration="2" complete="0" expand="true">
             <depend id="13" type="2" difference="0" hardness="Strong"/>
         </task>
-        <task id="13" uid="11f596793d3449d885caa54241acae54" name="Journalisation des log" meeting="false" start="2025-12-15" duration="1" complete="0" priority="0" expand="true">
+        <task id="13" uid="11f596793d3449d885caa54241acae54" name="Journalisation des log" meeting="false" start="2025-12-14" duration="1" complete="0" priority="0" expand="true">
             <depend id="19" type="2" difference="0" hardness="Strong"/>
         </task>
-        <task id="19" uid="2791be6a7e444aa3b263ccadc45cd1e9" name="Teste de l'application + codage de l'interface" meeting="false" start="2025-12-16" duration="3" complete="0" expand="true">
+        <task id="19" uid="2791be6a7e444aa3b263ccadc45cd1e9" name="Teste de l'application + codage de l'interface" meeting="false" start="2025-12-15" duration="3" complete="0" expand="true">
             <depend id="14" type="2" difference="0" hardness="Strong"/>
         </task>
-        <task id="14" uid="a0ab43c6d0334af3beb47c7ef12db4a6" name="Rédaction de la documentation de réponse au cahier des charge" meeting="false" start="2025-12-19" duration="3" complete="0" expand="true">
+        <task id="14" uid="a0ab43c6d0334af3beb47c7ef12db4a6" name="Rédaction de la documentation de réponse au cahier des charge" meeting="false" start="2025-12-18" duration="3" complete="0" expand="true">
             <depend id="15" type="2" difference="0" hardness="Strong"/>
         </task>
-        <task id="15" uid="ba45036ec41042daa367e55b357f96ac" name="Rédaction des document d'installation" meeting="false" start="2025-12-22" duration="3" complete="0" expand="true">
+        <task id="15" uid="ba45036ec41042daa367e55b357f96ac" name="Rédaction des document d'installation" meeting="false" start="2025-12-21" duration="3" complete="0" expand="true">
             <depend id="16" type="2" difference="0" hardness="Strong"/>
         </task>
-        <task id="16" uid="859aaf0e819c4872a53a1acb1c27278e" name="Faire la vidéo de démonstration" meeting="false" start="2025-12-25" duration="2" complete="0" expand="true">
+        <task id="16" uid="859aaf0e819c4872a53a1acb1c27278e" name="Faire la vidéo de démonstration" meeting="false" start="2025-12-24" duration="2" complete="0" expand="true">
             <depend id="18" type="2" difference="0" hardness="Strong"/>
         </task>
-        <task id="18" uid="c9dce3b93c54475c9a69431a7b5b3638" name="Faire la fiche individuelle" meeting="false" start="2025-12-27" duration="1" complete="0" expand="true"/>
+        <task id="18" uid="c9dce3b93c54475c9a69431a7b5b3638" name="Faire la fiche individuelle" meeting="false" start="2025-12-26" duration="1" complete="0" expand="true"/>
         <task id="17" uid="4fa8b499cfe6414899539df6e3d870df" name="Rendre le code + la documentation" meeting="true" start="2025-12-31" duration="0" complete="0" priority="4" expand="true"/>
     </tasks>
     <resources/>

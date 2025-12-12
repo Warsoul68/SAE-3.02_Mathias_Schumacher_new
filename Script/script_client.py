@@ -2,6 +2,9 @@ import socket
 import threading
 import time
 import random
+from chiffrement_RSA import CryptoManager
+
+crypto_outils = CryptoManager()
 
 # Config
 Port_Routeur = 8080
@@ -72,7 +75,7 @@ def trouver_ip_routeur():
                 mon_routeur_id = "?"
                 if "|" in message: mon_routeur_id = message.split('|')[1]
 
-                print(f"[Succès] Paserelle trouvée : {routeur_ip} (Agent ID {mon_routeur_id})")
+                print(f"[Succès] Passerelle trouvée : {routeur_ip} (Agent ID {mon_routeur_id})")
                 socketUDP.close()
                 return routeur_ip
         except: pass
@@ -93,11 +96,44 @@ def envoyer_commande(routeur_ip, commande):
         print(f"[Erreur] : {e}")
         return "ERROR"
     
-def recuperer_annuaire(routeur_ip):
-    reponse = envoyer_commande(routeur_ip, "REQ_LIST_IDS")
-    if reponse and "ERROR" not in reponse:
-        return [x.strip() for x in reponse.split(',') if x.strip()]
-    return []
+def recuperer_annuaire_avec_cles(routeur_ip):
+    reponse = envoyer_commande(routeur_ip, "REQ_LIST_KEYS")
+
+    annuaire = {}
+    if not reponse or "ERROR" in reponse:
+        return annuaire
+    
+    items = reponse.split('|')
+    for item in items:
+        try:
+            if "KEY:" in item:
+                parties = item.split(",KEY:")
+                id_r = parties[0].replace("ID:", "").strip()
+                cle_str = parties[1].strip()
+                e_val, n_val = cle_str.split(',')
+                annuaire[id_r] = (int(e_val), int(n_val))
+        except: pass
+
+    return annuaire
+
+def construire_oignon(message, chemin_ids, annuaire_cles, id_dest_final):
+    blob = f"CMD_FINAL|{id_dest_final}|{message}"
+
+    dernier_id = chemin_ids[-1]
+    cle_derniere = annuaire_cles[dernier_id]
+    blob_chiffre = crypto_outils.chiffrer(blob, cle_derniere)
+
+    routeur_restants = list(reversed(chemin_ids[:-1]))
+
+    prochain_saut = dernier_id
+
+    for id_routeur in routeur_restants:
+        cle = annuaire_cles[id_routeur]
+        nouvelle_instruction = f"CMD_RELAY|{prochain_saut}|{blob_chiffre}"
+
+        blob_chiffre = crypto_outils.chiffrer(nouvelle_instruction, cle)
+        prochain_saut = id_routeur
+    return f"CMD_OIGNON|{blob_chiffre}"
 
 # Menu
 def menu():
@@ -125,56 +161,51 @@ def menu():
         
         if choix == "1":
             print("Récuperation de l'annuaire...")
-            ids = recuperer_annuaire(routeur_ip)
+            ids = recuperer_annuaire_avec_cles(routeur_ip)
             if ids:
                 print(f"\n[Annuaire Réseau] {len(ids)} Routeur(s) actif(s) : {ids}\n")
             else:
                 print("\n[Annuaire] Vide ou Master injoignable.\n")
             
         elif choix == "2":
-            dest = input("IP du destinataire : ")
-            if not dest: continue
+            dest = input("IP Destinataire : ")
+            message = input("Message : ")
 
-            print("Mise à jour de la liste des roteurs...")
-            ids_dispo = recuperer_annuaire(routeur_ip)
-            nb_routeurs_actifs = len(ids_dispo)
+            annuaire = recuperer_annuaire_avec_cles(routeur_ip)
+            ids_dispo = list(annuaire.keys())
+            nb_routeurs_total = len(ids_dispo)
 
-            if nb_routeurs_actifs == 0:
-                print("Erreur : Aucun routeur disponible pour relayer le message.")
+            if nb_routeurs_total == 0:
+                print("[Erreur] Aucun routeur disponible (ou pas de clés).")
                 continue
-            print(f"Routeur disponible : {ids_dispo}")
+
+            print(f"{nb_routeurs_total} routeurs disponibles : {ids_dispo}")
 
             while True:
                 try:
-                    saisie = input(f"Combien de sauts voulez-vous ? : ")
-                    nb_bonds = int(saisie)
-                    if nb_bonds > 0:
+                    saisie = input(f"Nombre de sauts souhaités (Max {nb_routeurs_total}) : ")
+                    nb_sauts = int(saisie)
+                    if 1 <= nb_sauts <= nb_routeurs_total:
                         break
-                    print("Il faut au moins 1 saut.")
+                    else:
+                        print(f"[Erreur] Vous devez choisir entre 1 et {nb_routeurs_total}.")
                 except ValueError:
-                    print("Veuillez entrer un chiffre")
+                    print("Veuillez entrer un chiffre.")
             
-            chemin = []
+            chemin = random.sample(ids_dispo, nb_sauts)
 
-            if nb_bonds <= nb_routeurs_actifs:
-                chemin = random.sample(ids_dispo, nb_bonds)
-            
-            else:
-                print(f"Note Vous demandez {nb_bonds} saut sur {nb_routeurs_actifs} routeurs.")
-                print(" -> Le message repassera plusieurs fois par les même noeuds.")
-                for _ in range(nb_bonds):
-                    chemin.append(random.choice(ids_dispo))
-                
-            chemin_str = ",".join(chemin)
-            print(f"Chemin généré : [{chemin_str}]")
+            print(f"Chemin généré (Unique) : {chemin}")
 
-            message = input("Votre message : ")
+            try:
+                print("Chiffrement en couches (Oignon)...")
+                paquet_final = construire_oignon(message, chemin, annuaire, dest)
 
-            commande = f"CMD_MSG|{dest}|{chemin_str}|{message}"
+                print(f"Envoie vers la passerelle...")
+                reponse = envoyer_commande(routeur_ip, paquet_final)
+                print(f"[Retour passerelle] : {reponse}")
+            except Exception as e:
+                print(f"[Erreur] lors de la création de l'oignon : {e}")
 
-            rep = envoyer_commande(routeur_ip, commande)
-            print(f"[Retour Passerelle] {rep}")
-            
         elif choix == "0":
             print("Fermeture.")
             break
