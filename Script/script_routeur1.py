@@ -247,7 +247,7 @@ def handle_connection(conn, addr, master_ip):
             elif commande.startswith("CMD_MSG"):
                 print(f"[Alerte Sécurité] {addr[0]} a tenté d'envoyer un message en clair !")
                 
-                conn.sendall(b"Erreur : Protocole non sécurisé interdit. Utilisez le mode Oignon.")
+                conn.sendall("Erreur : Protocole non sécurisé interdit. Utilisez le mode Oignon.".encode())
             else:
                 conn.sendall(b"Commande inconnue")
     except Exception as e:
