@@ -10,106 +10,142 @@ db_config = {
     "database": "Routagedb" 
 }
 
-TCP_PORT = 6000
-UDP_PORT = 50000
-        
-def sauvegarde_BDD(ip, port, cle):
-    conn = None
-    nouvel_id = "ERROR"
+Port_TCP = 6000
+Port_UDP = 50000
+
+def get_db_connection():
     try:
-        conn = mysql.connector.connect(**db_config)
-        cursor = conn.cursor()
-        
-        query = """
-        INSERT INTO TableRoutage (ip, port, cle) 
-        VALUES (%s, %s, %s) 
-        ON DUPLICATE KEY UPDATE port=%s, cle=%s
-        """
-        
-        cursor.execute(query, (ip, port, cle, port, cle))
-        conn.commit()
-        
-        # recuperation de l'id attribué
-        cursor.execute("SELECT id FROM TableRoutage WHERE ip=%s", (ip,))
-        res = cursor.fetchone()
-        if res:
-            nouvel_id = str(res[0])
-        
-        print(f"[BDD] Routeur {ip} traité -> ID attribué : {nouvel_id}")
-        
+        return mysql.connector.connect(**db_config)
     except mysql.connector.Error as err:
-        print(f"[BDD] Erreur SQL : {err}")
-    finally:
-        if conn and conn.is_connected():
+        print(f"[BDD] Erreur de connexion : {err}")
+
+def vider_bdd():
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("TRUNCATE TABLE TableRoutage")
+            conn.commit()
+            print("[BDD] Base de données nettoyée (vider).")
             conn.close()
-    
-    return nouvel_id
-    
-def compter_routeur_bdd():
-    compteur = 0
-    conn = None
-    try:
-        conn = mysql.connector.connect(**db_config)
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM TableRoutage")
-        res = cursor.fetchone()
-        if res: compteur = res[0]
-    except: pass
-    finally:
-        if conn and conn.is_connected(): conn.close()
-    return compteur
+        except Exception as e:
+            print(f"[BDD] Erreur pour vider : {e}")
 
-def get_routeur_aleatoire_bdd():
-    resultat = "NONE"
-    conn = None
-    try:
-        conn = mysql.connector.connect(**db_config)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM TableRoutage ORDER BY RAND() LIMIT 1")
-        res = cursor.fetchone()
-        if res:
-            resultat = str(res[0])
-    except: pass
-    finally:
-        if conn and conn.is_connected(): conn.close()
-    return resultat
-
-def get_ip_from_id(id_routeur):
-    ip_trouvee = "ERROR"
-    conn = None
-    try:
-        conn = mysql.connector.connect(**db_config)
-        cursor = conn.cursor()
-        cursor.execute("SELECT ip FROM TableRoutage WHERE id=%s", (id_routeur,))
-        res = cursor.fetchone()
-        if res:
-            ip_trouvee = res[0]
-    except: pass
-    finally:
-        if conn and conn.is_connected(): conn.close()
-    return ip_trouvee
-
-def get_tout_les_routeur_ids_liste():
-    liste = []
-    conn = None
-    try:
-        conn = mysql.connector.connect(**db_config)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM TableRoutage")
-        for row in cursor.fetchall():
-            liste.append(str(row[0]))
-    except: pass
-    finally:
-        if conn and conn.is_connected(): conn.close()
-    return ",".join(liste)
+def enregistrer_routeur(ip, port, cle):
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            query = "INSERT INTO TableRoutage (ip, port, cle) VALUES (%s, %s, %s)"
+            cursor.execute(query, (ip, port, cle))
+            conn.commit()
+            nouvelle_id = cursor.lastrowid
+            conn.close()
+            return nouvelle_id
+        except Exception as e:
+            print(f"[BDD] Erreur Enregistrement : {e}")
+            return None
+    return None
     
+def get_ip_par_id(id_routeur):
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT ip FROM TableRoutage WHERE id = %s", (id_routeur,))
+            res = cursor.fetchone()
+            conn.close()
+            if res:
+                return res[0]
+        except: pass
+    return "ERROR"
+    
+def compter_routeurs():
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM TableRoutage")
+            res = cursor.fetchone()[0]
+            conn.close()
+            return str(res)
+        except: pass
+    return "0"
+
+def handle_client(conn, addr):
+    print(f"[Connexion] De {addr[0]}") 
+    try:
+        while True:
+            data = conn.recv(8192)
+            if not data: break
+            message = data.decode().strip()
+            
+            # Enregistrement d'un routeur
+            if "|" in message and "REQ" not in message:
+                try:
+                    parties = message.split('|')
+                    ip_r = parties[0]
+                    port_r = parties[1]
+                    cle_r = parties[2]
+                    
+                    nouvelle_id = enregistrer_routeur(ip_r, port_r, cle_r)
+                    if nouvelle_id:
+                        print(f"[Enregistrement] Routeur {ip_r} (ID {nouvelle_id}) ajouté avec clé.")
+                        conn.sendall(f"ACK|{nouvelle_id}".encode())
+                    else:
+                        conn.sendall(b"NACK")
+                except:
+                    conn.sendall(b"Erreur de format")
+
+            elif message == "REQ_LIST_IDS":
+                conn_bdd = get_db_connection()
+                if conn_bdd:
+                    cursor = conn_bdd.cursor()
+                    cursor.execute("SELECT id FROM TableRoutage")
+                    res = cursor.fetchall()
+                    conn_bdd.close()
+                    reponse = "|".join([f"ID:{r[0]}" for r in res])
+                    conn.sendall(reponse.encode())
+
+            elif message == "REQ_LIST_KEYS":
+                print(f"[Requete] {addr[0]} télécharge l'annuaire cryptographique.")
+                conn_bdd = get_db_connection()
+                if conn_bdd:
+                    cursor = conn_bdd.cursor()
+                    cursor.execute("SELECT id, cle FROM TableRoutage")
+                    res = cursor.fetchall()
+                    conn_bdd.close()
+ 
+                    items = []
+                    for r in res:
+                        rid = r[0]
+                        rcle = r[1]
+                        items.append(f"ID:{rid},KEY:{rcle}")
+                    
+                    reponse = "|".join(items)
+                    conn.sendall(reponse.encode())
+
+            elif message.startswith("REQ_RESOLVE_ID"):
+                id_cible = message.split('|')[1]
+                ip = get_ip_par_id(id_cible)
+                conn.sendall(ip.encode())
+
+            elif message == "REQ_NB_ROUTEURS":
+                nb = compter_routeurs()
+                conn.sendall(nb.encode())
+
+    except Exception as e:
+        print(f"Erreur Client {addr}: {e}")
+    finally:
+        conn.close()
+        
 # Service de decouverte UDP
 def lancement_service_decouverte():
     socketUDP = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     socketUDP.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
-        socketUDP.bind(("0.0.0.0", UDP_PORT))
-        print(f"[UDP] Service de découverte sur le port {UDP_PORT}")
+        socketUDP.bind(("0.0.0.0", Port_UDP))
+        print(f"[UDP] Service de découverte sur le port {Port_UDP}")
         while True:
             try:
                 data, addr = socketUDP.recvfrom(1024)
@@ -120,68 +156,30 @@ def lancement_service_decouverte():
         print(f"[UDP] Erreur : {e}")
     finally:
         socketUDP.close()
-
-# service TCP
-def handle_routeur(conn, addr):
-    print(f"[+] Connexion TCP de {addr}")
-    try:
-        while True:
-            data = conn.recv(1024)
-            if not data: break
-            
-            raw_msg = data.decode('utf-8').strip()
-            if "|" in raw_msg and "REQ" not in raw_msg and "CMD" not in raw_msg:
-                try:
-                    elements = raw_msg.split('|')
-                    if len(elements) == 3:
-                        r_ip = elements[0]
-                        r_port = int(elements[1])
-                        r_cle = elements[2] 
-                        mon_id = sauvegarde_BDD(r_ip, r_port, r_cle)
-                        conn.sendall(f"ACK|{mon_id}".encode())
-                    else: conn.sendall(b"ERREUR: Format")
-                except: conn.sendall(b"ERREUR: Invalide")
-                
-            elif raw_msg.startswith("REQ_RESOLVE_ID|"):
-                target_id = raw_msg.split('|')[1]
-                target_ip = get_ip_from_id(target_id)
-                conn.sendall(target_ip.encode())
-            
-            elif raw_msg == "REQ_LIST_IDS":
-                ids_str = get_tout_les_routeur_ids_liste()
-                conn.sendall(ids_str.encode())
-                
-            elif raw_msg == "REQ_NB_ROUTEURS":
-                nb = compter_routeurs_bdd()
-                conn.sendall(str(nb).encode())
-
-            elif raw_msg == "REQ_RANDOM_ROUTER":
-                rand_id = get_routeur_aleatoire_bdd()
-                conn.sendall(rand_id.encode())
-            
-            else:
-                conn.sendall(b"ERREUR: Commande inconnue")
-
-    except Exception as e:
-        print(f"[{addr}] Erreur Socket : {e}")
-    finally:
-        conn.close()
         
-if __name__ == "__main__":
-    print("Lancement Master")
+# service TCP
+def demarrer_master():
+    print("Master Lancé")
+    
+    vider_bdd()
+    
     threading.Thread(target=lancement_service_decouverte, daemon=True).start()
     
-    socket_master = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    socket_master.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    socketTCPmaster = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    socketTCPmaster.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
-        socket_master.bind(("0.0.0.0", TCP_PORT))
-        socket_master.listen(50)
-        print(f"[TCP] Master en écoute sur le port {TCP_PORT}...")
+        socketTCPmaster.bind(('0.0.0.0', Port_TCP))
+        socketTCPmaster.listen(50)
+        print(f"[TCP] Prêt à enregistrer les routeurs sur le port {Port_TCP}...")
         
         while True:
-            conn, addr = socket_master.accept()
-            threading.Thread(target=handle_routeur, args=(conn, addr), daemon=True).start()
-    except KeyboardInterrupt:
-        print("\n[!] Arrêt du serveur demandée...")
+            conn, addr = socketTCPmaster.accept()
+            threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start()
+    
+    except Exception as e:
+        print(f"[TCP] Crash Majeur : {e}")
     finally:
-        socket_master.close()
+        socketTCPmaster.close()
+        
+if __name__ == "__main__":
+    demarrer_master()
