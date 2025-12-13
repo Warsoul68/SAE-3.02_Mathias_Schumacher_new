@@ -110,7 +110,7 @@ def demander_ip_au_master(master_ip, id_cible):
         socketmasterTCP.settimeout(3)
         socketmasterTCP.connect((master_ip, Port_TCP_master))
         socketmasterTCP.sendall(f"REQ_RESOLVE_ID|{id_cible}".encode())
-        ip_recue = socketmasterTCP.recv(1024).decode().strip()
+        reponse = socketmasterTCP.recv(1024).decode().strip()
         socketmasterTCP.close()
         
         if "ERROR" in reponse: return None, None
