@@ -106,43 +106,70 @@ def envoyer_commande(routeur_ip, commande):
         return "ERROR"
     
 def recuperer_annuaire_complet(routeur_ip, routeur_port):
+    print(f"📡 Connexion au routeur {routeur_ip}:{routeur_port} pour l'annuaire...")
     try:
         socketTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         socketTCP.settimeout(5)
         socketTCP.connect((routeur_ip, routeur_port))
         socketTCP.sendall(b"REQ_LIST_KEYS")
-        reponse = socketTCP.recv(8192).decode("utf-8")
+        reponse = socketTCP.recv(65536).decode("utf-8") # Buffer augmenté
         socketTCP.close()
-    except:
+    except Exception as e:
+        print(f"❌ Erreur connexion annuaire : {e}")
         return {}
 
     annuaire = {}
-    if not reponse or "ERROR" in reponse: return annuaire
+    if not reponse or "ERROR" in reponse: 
+        print("⚠️ Réponse annuaire vide ou erreur.")
+        return annuaire
+
+    # print(f"DEBUG BRUT REÇU : {reponse}") # Décommente si tu veux tout voir
 
     lignes_routeurs = reponse.split('|')
 
     for ligne in lignes_routeurs:
         if not ligne: continue
         try:
+            # On découpe par point-virgule
             champs = ligne.split(';')
             infos = {}
             for champ in champs:
-                if ':' in champs:
+                if ':' in champ:
                     k, v = champ.split(':', 1)
                     infos[k] = v
+            
             if 'ID' in infos and 'KEY' in infos:
                 id_r = infos['ID']
                 cle_str = infos['KEY']
 
-                e_val, n_val = cle_str.split(',')
-
+                # --- CORRECTION DU CRASH ICI ---
+                # On nettoie la clé (parfois des espaces traînent)
+                cle_str = cle_str.strip()
+                
+                if ',' in cle_str:
+                    parts = cle_str.split(',')
+                    
+                    # C'est ici que ça plantait avant !
+                    if len(parts) >= 2:
+                        e_val = parts[0]
+                        n_val = parts[1]
+                        # On ignore parts[2], parts[3] s'il y en a...
+                    else:
+                        print(f"⚠️ Clé trop courte pour ID {id_r} : {cle_str}")
+                        continue
+                else:
+                    print(f"⚠️ Pas de virgule dans la clé pour ID {id_r}")
+                    continue
+                
+                # On ajoute à l'annuaire
                 annuaire[id_r] = {
                     'ip': infos.get('IP', ''),
                     'port': int(infos.get('PORT', Port_Routeur)),
                     'cle': (int(e_val), int(n_val))
                 }
         except Exception as e:
-            print(f"[Annuaire] Ligne ignorée car mal formée : {e}")
+            print(f"⚠️ Erreur de parsing sur la ligne : {ligne}")
+            print(f"   Détail : {e}")
             pass
 
     return annuaire
@@ -238,7 +265,7 @@ def menu():
                 ip_cible = annuaire[premier_id]['ip']
                 port_cible = annuaire[premier_id]['port']
 
-                print(f"Connexion directe au 1er saut : ID {premier_id} ({ip_cible}:{port_cible()})")
+                print(f"Connexion directe au 1er saut : ID {premier_id} ({ip_cible}:{port_cible})")
 
                 socketTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 socketTCP.settimeout(5)

@@ -130,12 +130,12 @@ def handle_client(conn, addr):
             elif message.startswith("REQ_RESOLVE_ID"):
                 id_cible = message.split('|')[1]
                 
-                conn_bdd = get_db_connection
+                conn_bdd = get_db_connection()
                 if conn_bdd:
                     cursor = conn_bdd.cursor()
                     cursor.execute("SELECT ip, port FROM TableRoutage WHERE id = %s", (id_cible,))
                     res = cursor.fetchone()
-                    conn_bdd.close
+                    conn_bdd.close()
                     
                     if res:
                         conn.sendall(f"{res[0]}|{res[1]}".encode())
