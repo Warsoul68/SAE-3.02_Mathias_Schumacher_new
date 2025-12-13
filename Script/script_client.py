@@ -55,7 +55,7 @@ def trouver_ip_routeur():
         if ip_test.startswith("127."): continue
         socketUDP = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         socketUDP.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        socketUDP.settimeout(1)
+        socketUDP.settimeout(20)
 
         try:
             socketUDP.bind((ip_test, 0))
@@ -95,7 +95,7 @@ def trouver_ip_routeur():
 def envoyer_commande(routeur_ip, commande):
     try:
         socketTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        socketTCP.settimeout(5)
+        socketTCP.settimeout(20)
         socketTCP.connect((routeur_ip, Port_Routeur))
         socketTCP.sendall(commande.encode("utf-8"))
         reponse = socketTCP.recv(4096).decode("utf-8")
@@ -109,7 +109,7 @@ def recuperer_annuaire_complet(routeur_ip, routeur_port):
     print(f"Connexion au routeur {routeur_ip}:{routeur_port} pour l'annuaire...")
     try:
         socketTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        socketTCP.settimeout(5)
+        socketTCP.settimeout(20)
         socketTCP.connect((routeur_ip, routeur_port))
         socketTCP.sendall(b"REQ_LIST_KEYS")
         reponse = socketTCP.recv(65536).decode("utf-8")
@@ -257,7 +257,7 @@ def menu():
                 print(f"Connexion directe au 1er saut : ID {premier_id} ({ip_cible}:{port_cible})")
 
                 socketTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                socketTCP.settimeout(5)
+                socketTCP.settimeout(20)
                 socketTCP.connect((ip_cible, port_cible)) 
                 socketTCP.sendall(paquet_final.encode())
                 rep = socketTCP.recv(4096).decode()

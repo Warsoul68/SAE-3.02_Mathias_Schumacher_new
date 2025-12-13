@@ -185,7 +185,7 @@ def ecouter_recherche_clients():
 def handle_connection(conn, addr, master_ip):
     try:
         while True:
-            data = conn.recv(8192)
+            data = conn.recv(65536)
             if not data: break
             commande = data.decode().strip()
             
@@ -226,6 +226,7 @@ def handle_connection(conn, addr, master_ip):
                         if prochaine_ip and prochain_port:
                             try:
                                 prochaine_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                prochaine_socket.settimeout(15)
                                 prochaine_socket.connect((prochaine_ip, prochain_port))
                                 prochaine_socket.sendall(f"CMD_OIGNON|{reste_blob}".encode())
                                 prochaine_socket.close()
