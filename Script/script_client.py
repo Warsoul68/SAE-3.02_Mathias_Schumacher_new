@@ -105,31 +105,45 @@ def envoyer_commande(routeur_ip, commande):
         print(f"[Erreur] : {e}")
         return "ERROR"
     
-def recuperer_annuaire_avec_cles(routeur_ip):
-    reponse = envoyer_commande(routeur_ip, "REQ_LIST_KEYS")
+def recuperer_annuaire_complet(routeur_ip, routeur_port):
+    try:
+        socketTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        socketTCP.settimeout(5)
+        socketTCP.connect((routeur_ip, routeur_port))
+        socketTCP.sendall(b"REQ_LIST_KEYS")
+        reponse = socketTCP.recv(8192).decode("utf-8")
+        socketTCP.close()
+    except:
+        return {}
 
     annuaire = {}
-    if not reponse or "ERROR" in reponse:
-        return annuaire
-    
+    if not reponse or "ERROR" in reponse: return annuaire
+
     items = reponse.split('|')
     for item in items:
         try:
-            if "KEY:" in item:
-                parties = item.split(",KEY:")
-                id_r = parties[0].replace("ID:", "").strip()
-                cle_str = parties[1].strip()
-                e_val, n_val = cle_str.split(',')
-                annuaire[id_r] = (int(e_val), int(n_val))
-        except: pass
+            parties = item.split(',')
 
+            id_r = parties[0].split(':')[1]
+            ip_r = parties[1].split(':')[1]
+            port_r = int(parties[2].split(':')[1])
+
+            e_val = parties[3].split(':')[1]
+            n_val = parties[4]
+
+            annuaire[id_r] = {
+                'ip': ip_r,
+                'port': port_r,
+                'cle': (int(e_val), int(n_val))
+            }
+        except:  pass
     return annuaire
 
-def construire_oignon(message, chemin_ids, annuaire_cles, id_dest_final):
+def construire_oignon(message, chemin_ids, annuaire_complet, id_dest_final):
     blob = f"CMD_FINAL|{id_dest_final}|{message}"
 
     dernier_id = chemin_ids[-1]
-    cle_derniere = annuaire_cles[dernier_id]
+    cle_derniere = annuaire_complet[dernier_id]
     blob_chiffre = crypto_outils.chiffrer(blob, cle_derniere)
 
     routeur_restants = list(reversed(chemin_ids[:-1]))
@@ -137,11 +151,11 @@ def construire_oignon(message, chemin_ids, annuaire_cles, id_dest_final):
     prochain_saut = dernier_id
 
     for id_routeur in routeur_restants:
-        cle = annuaire_cles[id_routeur]
+        cle = annuaire_complet[id_routeur]['cle']
         nouvelle_instruction = f"CMD_RELAY|{prochain_saut}|{blob_chiffre}"
-
         blob_chiffre = crypto_outils.chiffrer(nouvelle_instruction, cle)
         prochain_saut = id_routeur
+
     return f"CMD_OIGNON|{blob_chiffre}"
 
 # Menu
@@ -170,7 +184,7 @@ def menu():
         
         if choix == "1":
             print("Récuperation de l'annuaire...")
-            ids = recuperer_annuaire_avec_cles(routeur_ip)
+            ids = recuperer_annuaire_complet(routeur_ip)
             if ids:
                 print(f"\n[Annuaire Réseau] {len(ids)} Routeur(s) actif(s) : {ids}\n")
             else:
@@ -180,7 +194,8 @@ def menu():
             dest = input("IP Destinataire : ")
             message = input("Message : ")
 
-            annuaire = recuperer_annuaire_avec_cles(routeur_ip)
+            annuaire = recuperer_annuaire_complet(routeur_ip, Port_Routeur)
+            
             ids_dispo = list(annuaire.keys())
             nb_routeurs_total = len(ids_dispo)
 
@@ -188,6 +203,7 @@ def menu():
                 print("[Erreur] Aucun routeur disponible (ou pas de clés).")
                 continue
 
+            print(f"Routeurs : {ids_dispo}")
             print(f"{nb_routeurs_total} routeurs disponibles : {ids_dispo}")
 
             while True:
@@ -203,17 +219,30 @@ def menu():
             
             chemin = random.sample(ids_dispo, nb_sauts)
 
-            print(f"Chemin généré (Unique) : {chemin}")
+            print(f"Chemin : {chemin}")
 
             try:
-                print("Chiffrement en couches (Oignon)...")
-                paquet_final = construire_oignon(message, chemin, annuaire, dest)
+                print("Construction de l'oignon...")
+                paquet_final = construire_oignon(message, chemin, annuaire, dest) 
 
-                print(f"Envoie vers la passerelle...")
-                reponse = envoyer_commande(routeur_ip, paquet_final)
-                print(f"[Retour passerelle] : {reponse}")
+                premier_id = chemin[0]
+
+                ip_cible = annuaire[premier_id]['ip']
+                port_cible = annuaire[premier_id]['port']
+
+                print(f"Connexion directe au 1er saut : ID {premier_id} ({ip_cible}:{port_cible()})")
+
+                socketTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                socketTCP.settimeout(5)
+                socketTCP.connect((ip_cible, port_cible))
+                socketTCP.sendall(paquet_final.encode())
+                rep = socketTCP.recv(4096).decode()
+                socketTCP.close()
+
+                print(f"[Retour] : {rep}")
+
             except Exception as e:
-                print(f"[Erreur] lors de la création de l'oignon : {e}")
+                print(f"[Erreur] {e}")
 
         elif choix == "0":
             print("Fermeture.")

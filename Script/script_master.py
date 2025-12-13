@@ -119,8 +119,10 @@ def handle_client(conn, addr):
                     items = []
                     for r in res:
                         rid = r[0]
-                        rcle = r[1]
-                        items.append(f"ID:{rid},KEY:{rcle}")
+                        rip = r[1]
+                        rport = r[2]
+                        rcle = r[3]
+                        items.append(f"ID:{rid},IP:{rip},PORT:{rport},KEY:{rcle}")
                     
                     reponse = "|".join(items)
                     conn.sendall(reponse.encode())
