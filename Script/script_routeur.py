@@ -177,7 +177,7 @@ def ecouter_recherche_clients():
         while True:
             data, addr = socketUDPclient.recvfrom(1024)
             if data.decode().strip() == "Ou_est_le_routeur?":
-                reponse = f"Je_suis_le_routeur|{mon_id_interne}"
+                reponse = f"Je_suis_le_routeur|{mon_id_interne}|{Port_Routeur}"
                 socketUDPclient.sendto(reponse.encode(), addr)
     except Exception as e:
         print(f"[UDP Clients] Erreur : {e}")

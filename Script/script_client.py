@@ -73,9 +73,18 @@ def trouver_ip_routeur():
             if message.startswith("Je_suis_le_routeur"):
                 routeur_ip = addr[0]
                 mon_routeur_id = "?"
-                if "|" in message: mon_routeur_id = message.split('|')[1]
+                port_detectee = 8080
 
-                print(f"[Succès] Passerelle trouvée : {routeur_ip} (Agent ID {mon_routeur_id})")
+                if "|" in message:
+                    parties = message.split('|')
+                    mon_routeur_id = parties[1]
+                    if len(parties) > 2:
+                        port_detectee = int(parties[2])
+                
+                global Port_Routeur
+                Port_Routeur = port_detectee
+
+                print(f"[Succès] Passerelle trouvée : {routeur_ip}:{Port_Routeur} (Agent ID {mon_routeur_id})")
                 socketUDP.close()
                 return routeur_ip
         except: pass
