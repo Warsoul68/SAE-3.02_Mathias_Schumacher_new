@@ -184,7 +184,7 @@ def menu():
         
         if choix == "1":
             print("Récuperation de l'annuaire...")
-            ids = recuperer_annuaire_complet(routeur_ip)
+            ids = recuperer_annuaire_complet(routeur_ip, Port_Routeur)
             if ids:
                 print(f"\n[Annuaire Réseau] {len(ids)} Routeur(s) actif(s) : {ids}\n")
             else:

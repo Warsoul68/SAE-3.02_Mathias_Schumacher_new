@@ -112,7 +112,7 @@ def handle_client(conn, addr):
                 conn_bdd = get_db_connection()
                 if conn_bdd:
                     cursor = conn_bdd.cursor()
-                    cursor.execute("SELECT id, cle FROM TableRoutage")
+                    cursor.execute("SELECT id, ip, port, cle FROM TableRoutage")
                     res = cursor.fetchall()
                     conn_bdd.close()
  
