@@ -119,24 +119,32 @@ def recuperer_annuaire_complet(routeur_ip, routeur_port):
     annuaire = {}
     if not reponse or "ERROR" in reponse: return annuaire
 
-    items = reponse.split('|')
-    for item in items:
+    lignes_routeurs = reponse.split('|')
+
+    for ligne in lignes_routeurs:
+        if not ligne: continue
         try:
-            parties = item.split(',')
+            champs = ligne.split(';')
+            infos = {}
+            for champ in champs:
+                if ':' in champs:
+                    k, v = champ.split(':', 1)
+                    infos[k] = v
+            if 'ID' in infos and 'KEY' in infos:
+                id_r = infos['ID']
+                cle_str = infos['KEY']
 
-            id_r = parties[0].split(':')[1]
-            ip_r = parties[1].split(':')[1]
-            port_r = int(parties[2].split(':')[1])
+                e_val, n_val = cle_str.split(',')
 
-            e_val = parties[3].split(':')[1]
-            n_val = parties[4]
+                annuaire[id_r] = {
+                    'ip': infos.get('IP', ''),
+                    'port': int(infos.get('PORT', Port_Routeur)),
+                    'cle': (int(e_val), int(n_val))
+                }
+        except Exception as e:
+            print(f"[Annuaire] Ligne ignorée car mal formée : {e}")
+            pass
 
-            annuaire[id_r] = {
-                'ip': ip_r,
-                'port': port_r,
-                'cle': (int(e_val), int(n_val))
-            }
-        except:  pass
     return annuaire
 
 def construire_oignon(message, chemin_ids, annuaire_complet, id_dest_final):

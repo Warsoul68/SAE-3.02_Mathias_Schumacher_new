@@ -122,7 +122,7 @@ def handle_client(conn, addr):
                         rip = r[1]
                         rport = r[2]
                         rcle = r[3]
-                        items.append(f"ID:{rid},IP:{rip},PORT:{rport},KEY:{rcle}")
+                        items.append(f"ID:{rid};IP:{rip};PORT:{rport};KEY:{rcle}")
                     
                     reponse = "|".join(items)
                     conn.sendall(reponse.encode())
