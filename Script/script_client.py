@@ -1,4 +1,4 @@
-import socket
+import socket 
 import threading
 import time
 import random
@@ -28,7 +28,7 @@ def ecouter_message_entrants():
     except: pass
 
 
-# recherche du routeur UDP
+# recherche UDP
 def trouver_ip_routeur():
     print("[Auto-Config] Recherche du routeur sur le réseau...")
     liste_ips = []
@@ -49,7 +49,7 @@ def trouver_ip_routeur():
         socket_client_UDP.close()
     except: pass
 
-    if not liste_ips:liste_ips = ["10.0.0.1", "192.168.1.41"]
+    if not liste_ips: liste_ips = ["10.0.0.1", "192.168.1.41"]
     
     for ip_test in liste_ips:
         if ip_test.startswith("127."): continue
@@ -60,8 +60,8 @@ def trouver_ip_routeur():
         try:
             socketUDP.bind((ip_test, 0))
             if ip_test.startswith("10."):
-                parts = ip_test.split('.')
-                broadcast_cible = f"{parts[0]}.{parts[1]}.{parts[2]}.255"
+                parties = ip_test.split('.')
+                broadcast_cible = f"{parties[0]}.{parties[1]}.{parties[2]}.255"
             else:
                 broadcast_cible = "<broadcast>"
             
@@ -106,70 +106,59 @@ def envoyer_commande(routeur_ip, commande):
         return "ERROR"
     
 def recuperer_annuaire_complet(routeur_ip, routeur_port):
-    print(f"📡 Connexion au routeur {routeur_ip}:{routeur_port} pour l'annuaire...")
+    print(f"Connexion au routeur {routeur_ip}:{routeur_port} pour l'annuaire...")
     try:
         socketTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         socketTCP.settimeout(5)
         socketTCP.connect((routeur_ip, routeur_port))
         socketTCP.sendall(b"REQ_LIST_KEYS")
-        reponse = socketTCP.recv(65536).decode("utf-8") # Buffer augmenté
+        reponse = socketTCP.recv(65536).decode("utf-8")
         socketTCP.close()
     except Exception as e:
-        print(f"❌ Erreur connexion annuaire : {e}")
+        print(f"Erreur Réseau Annuaire : {e}")
         return {}
 
     annuaire = {}
     if not reponse or "ERROR" in reponse: 
-        print("⚠️ Réponse annuaire vide ou erreur.")
         return annuaire
-
-    # print(f"DEBUG BRUT REÇU : {reponse}") # Décommente si tu veux tout voir
 
     lignes_routeurs = reponse.split('|')
 
     for ligne in lignes_routeurs:
-        if not ligne: continue
+        if not ligne.strip(): continue
         try:
-            # On découpe par point-virgule
-            champs = ligne.split(';')
+            if ';' in ligne:
+                champs = ligne.split(';')
+            else:
+                champs = ligne.split(',')
+
             infos = {}
             for champ in champs:
                 if ':' in champ:
-                    k, v = champ.split(':', 1)
-                    infos[k] = v
+                    parties = champ.split(':', 1)
+                    if len(parties) == 2:
+                        infos[parties[0]] = parties[1]
             
             if 'ID' in infos and 'KEY' in infos:
                 id_r = infos['ID']
-                cle_str = infos['KEY']
+                cle_str = infos['KEY'].strip()
 
-                # --- CORRECTION DU CRASH ICI ---
-                # On nettoie la clé (parfois des espaces traînent)
-                cle_str = cle_str.strip()
+                parts_cle = cle_str.split(',')
                 
-                if ',' in cle_str:
-                    parts = cle_str.split(',')
+                if len(parts_cle) >= 2:
+                    e_val = parts_cle[0]
+                    n_val = parts_cle[1]
                     
-                    # C'est ici que ça plantait avant !
-                    if len(parts) >= 2:
-                        e_val = parts[0]
-                        n_val = parts[1]
-                        # On ignore parts[2], parts[3] s'il y en a...
-                    else:
-                        print(f"⚠️ Clé trop courte pour ID {id_r} : {cle_str}")
-                        continue
+                    annuaire[id_r] = {
+                        'ip': infos.get('IP', ''),
+                        'port': int(infos.get('PORT', Port_Routeur)),
+                        'cle': (int(e_val), int(n_val))
+                    }
                 else:
-                    print(f"⚠️ Pas de virgule dans la clé pour ID {id_r}")
-                    continue
-                
-                # On ajoute à l'annuaire
-                annuaire[id_r] = {
-                    'ip': infos.get('IP', ''),
-                    'port': int(infos.get('PORT', Port_Routeur)),
-                    'cle': (int(e_val), int(n_val))
-                }
+                    print(f"Clé ignorée (format incorrect) : {cle_str}")
+
         except Exception as e:
-            print(f"⚠️ Erreur de parsing sur la ligne : {ligne}")
-            print(f"   Détail : {e}")
+            print(f"Erreur parsing ligne : {e}")
             pass
 
     return annuaire
@@ -178,7 +167,7 @@ def construire_oignon(message, chemin_ids, annuaire_complet, id_dest_final):
     blob = f"CMD_FINAL|{id_dest_final}|{message}"
 
     dernier_id = chemin_ids[-1]
-    cle_derniere = annuaire_complet[dernier_id]
+    cle_derniere = annuaire_complet[dernier_id]['cle']
     blob_chiffre = crypto_outils.chiffrer(blob, cle_derniere)
 
     routeur_restants = list(reversed(chemin_ids[:-1]))
@@ -195,7 +184,7 @@ def construire_oignon(message, chemin_ids, annuaire_complet, id_dest_final):
 
 # Menu
 def menu():
-    print("--- MESSAGERIE CLIENT ---")
+    print("Messagerie")
     threading.Thread(target=ecouter_message_entrants, daemon=True).start()
 
     routeur_ip = None
@@ -221,7 +210,7 @@ def menu():
             print("Récuperation de l'annuaire...")
             ids = recuperer_annuaire_complet(routeur_ip, Port_Routeur)
             if ids:
-                print(f"\n[Annuaire Réseau] {len(ids)} Routeur(s) actif(s) : {ids}\n")
+                print(f"\n[Annuaire Réseau] {len(ids)} Routeur(s) actif(s) : {list(ids.keys())}\n")
             else:
                 print("\n[Annuaire] Vide ou Master injoignable.\n")
             
@@ -269,7 +258,7 @@ def menu():
 
                 socketTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 socketTCP.settimeout(5)
-                socketTCP.connect((ip_cible, port_cible))
+                socketTCP.connect((ip_cible, port_cible)) 
                 socketTCP.sendall(paquet_final.encode())
                 rep = socketTCP.recv(4096).decode()
                 socketTCP.close()
