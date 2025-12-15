@@ -3,6 +3,19 @@ import threading
 import sys
 from chiffrement_RSA import CryptoManager
 
+def recevoir_tout(socket_conn):
+    donnees = b""
+    while True:
+        try:
+            partie = socket_conn.recv(65536)
+            if not partie: break
+            donnees += partie
+            if len(partie) < 65536: break
+        except socket.timeout: break
+        except Exception: break
+    return donnees
+
+
 # Config
 Port_TCP_master = 6000
 Port_UDP_master = 50000
@@ -185,9 +198,9 @@ def ecouter_recherche_clients():
 def handle_connection(conn, addr, master_ip):
     try:
         while True:
-            data = conn.recv(65536)
-            if not data: break
-            commande = data.decode().strip()
+            data_raw = recevoir_tout(conn)
+            if not data_raw: break
+            commande = data_raw.decode().strip()
             
             if commande == "REQ_LIST_IDS":
                 conn.sendall(recuperer_annuaire_master(master_ip).encode())
