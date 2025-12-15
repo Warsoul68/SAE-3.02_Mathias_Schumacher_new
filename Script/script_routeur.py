@@ -2,6 +2,21 @@ import socket
 import threading
 import sys
 from chiffrement_RSA import CryptoManager
+import datetime
+
+def journalisation_log(qui, type_message, message):
+    maintenant = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ligne_log = f"[{maintenant}] [{qui}] [{type_message}] {message}"
+
+    print(ligne_log)
+
+    nom_fichier = f"journal_{qui.lower()}.log"
+
+    try:
+        with open(nom_fichier, "a", encoding="utf-8") as f:
+            f.write(ligne_log + "\n")
+    except Exception as e:
+        print(f"Erreur d'écriture log : {e}")
 
 def recevoir_tout(socket_conn):
     donnees = b""
@@ -84,7 +99,7 @@ def trouver_master_et_mon_ip(ip_forcee=None):
             data, addr = socketmasterUDP.recvfrom(1024)
             if data.decode() == "Je_suis_le_master":
                 master_ip = addr[0]
-                print(f"[Succès] Master trouvé ({master_ip}) via {ip_test} !")
+                journalisation_log("RTR_ID", "MASTER", f"Master trouvé : {master_ip} via {ip_test}")
                 socketmasterUDP.close()
                 return master_ip, ip_test
         except: pass
@@ -107,14 +122,14 @@ def enregistrement_Master(master_ip, mon_ip):
         ack = socketTCP.recv(1024).decode()
         if "ACK|" in ack:
             mon_id_interne = ack.split('|')[1]
-            print(f"[Master] Enregistrement OK. Je suis l'Agent ID : {mon_id_interne}")
+            journalisation_log("RTR_ID", "INSCRIPTION", f"Enregistrement OK. ID : {mon_id_interne}")
             socketTCP.close()
             return True
         else:
-            print(f"[Master] Erreur ACK : {ack}")
+            journalisation_log("RTR_ID", "ERREUR", f"Échec inscription (ACK) : {ack}")
             return False
     except Exception as e:
-        print(f"[Erreur Enregistrement] {e}")
+        journalisation_log("RTR_ID", "ERREUR", f"Échec connexion Master : {e}")
         return False
 
 def demander_ip_au_master(master_ip, id_cible):
@@ -157,16 +172,16 @@ def recuperer_annuaire_cles(master_ip):
     except: return "ERROR"
 
 def livrer_au_client_final(dest_ip, message):
-    print(f"[Livraison] Connexion au Client final {dest_ip}:{Port_ecoute_client}...")
+    journalisation_log("RTR_ID", "LIVRAISON", f"Tente de livrer à {dest_ip}:{Port_ecoute_client}")
     try:
         socketTCPclient = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         socketTCPclient.settimeout(3)
         socketTCPclient.connect((dest_ip, Port_ecoute_client))
         socketTCPclient.sendall(message.encode())
         socketTCPclient.close()
-        print("[Livraison] Succés !")
+        journalisation_log("RTR_ID", "LIVRAISON", "Message livré avec succès.")
     except Exception as e:
-        print(f"[Livraison] Echec : {e}")
+        journalisation_log("RTR_ID", "ERREUR", f"Échec livraison client final : {e}")
 
 def demander_nb_hops(master_ip):
     try:
@@ -210,12 +225,12 @@ def handle_connection(conn, addr, master_ip):
                     parties = commande.split('|')
                     blob_chiffre = parties[1]
                     
-                    print(f"Oignon reçu de {addr[0]}. Déchiffrement...")
+                    journalisation_log("RTR_ID", "RECEPTION", f"Oignon reçu de {addr[0]} ({len(data_raw)} octets)")
                     
                     message_clair = mon_crypto.dechiffrer(blob_chiffre)
                     
                     if "[Erreur]" in message_clair or not message_clair:
-                        print("Echec déchiffremnt. Paquet rejeté.")
+                        journalisation_log("RTR_ID", "PAQUET REJETE", "Échec déchiffrement (mauvaise clé ou format).")
                         conn.sendall(b"Erreur Crypto")
                         continue
                         
@@ -223,7 +238,7 @@ def handle_connection(conn, addr, master_ip):
                         p = message_clair.split('|')
                         dest_ip = p[1]
                         contenu = p[2]
-                        print(f"Oignon ouvert : Instruction CMD_FINAL -> {dest_ip}")
+                        journalisation_log("RTR_ID", "CONTENU", f"CMD_FINAL. Destinataire : {dest_ip}")
                         livrer_au_client_final(dest_ip, contenu)
                         conn.sendall(b"Message Livre")
                         
@@ -232,7 +247,7 @@ def handle_connection(conn, addr, master_ip):
                         prochaine_id = p[1]
                         reste_blob = p[2]
                         
-                        print(f"🔄 Relais vers ID {prochaine_id}...")
+                        journalisation_log("RTR_ID", "RELAIS", f"Relais vers le nœud ID {prochaine_id}")
                         
                         prochaine_ip, prochain_port = demander_ip_au_master(master_ip, prochaine_id)
                         
@@ -246,14 +261,14 @@ def handle_connection(conn, addr, master_ip):
                                 
                                 conn.sendall(f"Relaye vers {prochaine_id}".encode())
                             except Exception as e:
-                                print(f"❌ Erreur connexion relais : {e}")
+                                journalisation_log("RTR_ID", "ERREUR", f"Échec connexion relais vers {prochaine_id} : {e}")
                                 conn.sendall(b"Erreur Relais")
                         else:
-                            print(f"❌ ID {prochaine_id} inconnu")
+                            journalisation_log("RTR_ID", "ERREUR", f"ID de relais {prochaine_id} inconnu du Master.")
                             conn.sendall(b"Erreur ID")
 
                 except Exception as e:
-                    print(f"❌ Crash traitement Oignon : {e}")
+                    journalisation_log("RTR_ID", "CRASH TRAITEMENT", f"Erreur fatale de l'oignon : {e}")
                                 
             elif commande == "CMD_GET_HOPS":
                 nb = demander_nb_hops(master_ip)
@@ -266,7 +281,7 @@ def handle_connection(conn, addr, master_ip):
                 conn.sendall(recuperer_annuaire_cles(master_ip).encode())
 
             elif commande.startswith("CMD_MSG"):
-                print(f"[Alerte Sécurité] {addr[0]} a tenté d'envoyer un message en clair !")
+                journalisation_log("RTR_ID", "ALERTE", f"{addr[0]} a tenté un protocole non sécurisé (CMD_MSG).")
                 
                 conn.sendall("Erreur : Protocole non sécurisé interdit. Utilisez le mode Oignon.".encode())
             else:
@@ -285,7 +300,7 @@ def start_routeur():
     
     master_ip, mon_ip = trouver_master_et_mon_ip()
     if not master_ip: 
-        print("Abandon : Pas de Master.")
+        journalisation_log("RTR_ID", "CRITIQUE", "Abandon : Master non trouvé.")
         return
     
     if not enregistrement_Master(master_ip, mon_ip):
@@ -298,7 +313,7 @@ def start_routeur():
     try:
         serveurSocket.bind(('0.0.0.0', Port_Routeur))
         serveurSocket.listen(20)
-        print(f"[Ecoute TCP] Prêt sur le port {Port_Routeur}...")
+        journalisation_log("RTR_ID", "TCP", f"Prêt à accepter des connexions sur {Port_Routeur}")
         while True:
             conn, addr = serveurSocket.accept()
             threading.Thread(target=handle_connection, args=(conn, addr, master_ip), daemon=True).start()

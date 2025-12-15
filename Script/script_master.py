@@ -1,6 +1,21 @@
 import socket
 import threading
 import mysql.connector
+import datetime
+
+def journalisation_log(qui, type_message, message):
+    maintenant = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ligne_log = f"[{maintenant}] [{qui}] [{type_message}] {message}"
+
+    print(ligne_log)
+
+    nom_fichier = f"journal_{qui.lower()}.log"
+
+    try:
+        with open(nom_fichier, "a", encoding="utf-8") as f:
+            f.write(ligne_log + "\n")
+    except Exception as e:
+        print(f"Erreur d'écriture log : {e}")
 
 # Configuration de la BDD
 db_config = {
@@ -17,7 +32,7 @@ def get_db_connection():
     try:
         return mysql.connector.connect(**db_config)
     except mysql.connector.Error as err:
-        print(f"[BDD] Erreur de connexion : {err}")
+        journalisation_log("MASTER", "ERREUR BDD", f"Échec de connexion : {err}")
 
 def vider_bdd():
     conn = get_db_connection()
@@ -26,10 +41,10 @@ def vider_bdd():
             cursor = conn.cursor()
             cursor.execute("TRUNCATE TABLE TableRoutage")
             conn.commit()
-            print("[BDD] Base de données nettoyée (vider).")
+            journalisation_log("MASTER", "NETTOYAGE", "Base de données nettoyée (vider).")
             conn.close()
         except Exception as e:
-            print(f"[BDD] Erreur pour vider : {e}")
+            journalisation_log("MASTER", "ERREUR BDD", f"Échec du vidage : {e}")
 
 def enregistrer_routeur(ip, port, cle):
     conn = get_db_connection()
@@ -43,7 +58,7 @@ def enregistrer_routeur(ip, port, cle):
             conn.close()
             return nouvelle_id
         except Exception as e:
-            print(f"[BDD] Erreur Enregistrement : {e}")
+            journalisation_log("MASTER", "ERREUR BDD", f"Échec de l'enregistrement : {e}")
             return None
     return None
     
@@ -73,7 +88,7 @@ def compter_routeurs():
     return "0"
 
 def handle_client(conn, addr):
-    print(f"[Connexion] De {addr[0]}") 
+    journalisation_log("MASTER", "CONNEXION", f"Nouvelle connexion TCP de {addr[0]}")
     try:
         while True:
             data = conn.recv(8192)
@@ -90,7 +105,7 @@ def handle_client(conn, addr):
                     
                     nouvelle_id = enregistrer_routeur(ip_r, port_r, cle_r)
                     if nouvelle_id:
-                        print(f"[Enregistrement] Routeur {ip_r} (ID {nouvelle_id}) ajouté avec clé.")
+                        journalisation_log("MASTER", "INSCRIPTION", f"Routeur {ip_r}:{port_r} enregistré (ID {nouvelle_id}).")
                         conn.sendall(f"ACK|{nouvelle_id}".encode())
                     else:
                         conn.sendall(b"NACK")
@@ -108,7 +123,7 @@ def handle_client(conn, addr):
                     conn.sendall(reponse.encode())
 
             elif message == "REQ_LIST_KEYS":
-                print(f"[Requete] {addr[0]} télécharge l'annuaire cryptographique.")
+                journalisation_log("MASTER", "ANNUAIRE", f"Envoi de l'annuaire cryptographique à {addr[0]}")
                 conn_bdd = get_db_connection()
                 if conn_bdd:
                     cursor = conn_bdd.cursor()
@@ -159,7 +174,7 @@ def lancement_service_decouverte():
     socketUDP.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         socketUDP.bind(("0.0.0.0", Port_UDP))
-        print(f"[UDP] Service de découverte sur le port {Port_UDP}")
+        journalisation_log("MASTER", "UDP", f"Service de découverte lancé sur le port {Port_UDP}")
         while True:
             try:
                 data, addr = socketUDP.recvfrom(1024)
@@ -184,14 +199,14 @@ def demarrer_master():
     try:
         socketTCPmaster.bind(('0.0.0.0', Port_TCP))
         socketTCPmaster.listen(50)
-        print(f"[TCP] Prêt à enregistrer les routeurs sur le port {Port_TCP}...")
+        journalisation_log("MASTER", "TCP", f"Prêt à enregistrer les routeurs sur le port {Port_TCP}...")
         
         while True:
             conn, addr = socketTCPmaster.accept()
             threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start()
     
     except Exception as e:
-        print(f"[TCP] Crash Majeur : {e}")
+        journalisation_log("MASTER", "CRASH", f"Erreur critique du serveur : {e}")
     finally:
         socketTCPmaster.close()
         

@@ -3,6 +3,21 @@ import threading
 import time
 import random
 from chiffrement_RSA import CryptoManager
+import datetime
+
+def journalisation_log(qui, type_message, message):
+    maintenant = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ligne_log = f"[{maintenant}] [{qui}] [{type_message}] {message}"
+
+    print(ligne_log)
+
+    nom_fichier = f"journal_{qui.lower()}.log"
+
+    try:
+        with open(nom_fichier, "a", encoding="utf-8") as f:
+            f.write(ligne_log + "\n")
+    except Exception as e:
+        print(f"Erreur d'écriture log : {e}")
 
 crypto_outils = CryptoManager()
 
@@ -22,7 +37,7 @@ def ecouter_message_entrants():
             conn, addr = socket_serveur.accept()
             data = conn.recv(4096)
             message = data.decode("utf-8")
-            print(f"\n\n [Message reçu] De {addr[0]} : \n {message}\n")
+            journalisation_log("CLIENT", "RECEPTION", f"Message reçu de {addr[0]}. Contenu : {message[:20]}...")
             print("Appuyer sur Entrée pour rafraîchir le menu...")
             conn.close()
     except: pass
@@ -30,7 +45,7 @@ def ecouter_message_entrants():
 
 # recherche UDP
 def trouver_ip_routeur():
-    print("[Auto-Config] Recherche du routeur sur le réseau...")
+    journalisation_log("CLIENT", "INIT", "Lancement de la recherche de passerelle.")
     liste_ips = []
 
     try:
@@ -84,7 +99,7 @@ def trouver_ip_routeur():
                 global Port_Routeur
                 Port_Routeur = port_detectee
 
-                print(f"[Succès] Passerelle trouvée : {routeur_ip}:{Port_Routeur} (Agent ID {mon_routeur_id})")
+                journalisation_log("CLIENT", "INIT", f"Passerelle trouvée : {routeur_ip} (ID {mon_routeur_id})")
                 socketUDP.close()
                 return routeur_ip
         except: pass
@@ -102,11 +117,11 @@ def envoyer_commande(routeur_ip, commande):
         socketTCP.close()
         return reponse
     except Exception as e:
-        print(f"[Erreur] : {e}")
+        journalisation_log("CLIENT", "ERREUR", f"Échec envoi commande Master : {e}")
         return "ERROR"
     
 def recuperer_annuaire_complet(routeur_ip, routeur_port):
-    print(f"Connexion au routeur {routeur_ip}:{routeur_port} pour l'annuaire...")
+    journalisation_log("CLIENT", "ANNUAIRE", f"Demande d'annuaire au routeur {routeur_ip}")
     try:
         socketTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         socketTCP.settimeout(20)
@@ -115,7 +130,7 @@ def recuperer_annuaire_complet(routeur_ip, routeur_port):
         reponse = socketTCP.recv(65536).decode("utf-8")
         socketTCP.close()
     except Exception as e:
-        print(f"Erreur Réseau Annuaire : {e}")
+        journalisation_log("CLIENT", "ERREUR", f"Échec récupération annuaire : {e}")
         return {}
 
     annuaire = {}
@@ -224,7 +239,7 @@ def menu():
             nb_routeurs_total = len(ids_dispo)
 
             if nb_routeurs_total == 0:
-                print("[Erreur] Aucun routeur disponible (ou pas de clés).")
+                journalisation_log("CLIENT", "ERREUR", "Impossible d'envoyer. Annuaire vide.")
                 continue
 
             print(f"Routeurs : {ids_dispo}")
@@ -246,7 +261,7 @@ def menu():
             print(f"Chemin : {chemin}")
 
             try:
-                print("Construction de l'oignon...")
+                journalisation_log("CLIENT", "ENVOI", f"Construction Oignon ({nb_sauts} sauts) vers {dest}")
                 paquet_final = construire_oignon(message, chemin, annuaire, dest) 
 
                 premier_id = chemin[0]
@@ -254,7 +269,7 @@ def menu():
                 ip_cible = annuaire[premier_id]['ip']
                 port_cible = annuaire[premier_id]['port']
 
-                print(f"Connexion directe au 1er saut : ID {premier_id} ({ip_cible}:{port_cible})")
+                journalisation_log("CLIENT", "ENVOI", f"Connexion 1er saut ID {premier_id} ({ip_cible})")
 
                 socketTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 socketTCP.settimeout(20)
@@ -263,13 +278,13 @@ def menu():
                 rep = socketTCP.recv(4096).decode()
                 socketTCP.close()
 
-                print(f"[Retour] : {rep}")
+                journalisation_log("CLIENT", "SUCCES", f"Message envoyé. Réponse du 1er saut : {rep[:15]}...")
 
             except Exception as e:
-                print(f"[Erreur] {e}")
+                journalisation_log("CLIENT", "ERREUR", f"Crash envoi/reception du message : {e}")
 
         elif choix == "0":
-            print("Fermeture.")
+            journalisation_log("CLIENT", "FIN", "Fermeture du programme.")
             break
 
 if __name__ == "__main__":
