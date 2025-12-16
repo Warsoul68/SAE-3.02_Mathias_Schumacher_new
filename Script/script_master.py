@@ -46,21 +46,46 @@ def vider_bdd():
         except Exception as e:
             journalisation_log("MASTER", "ERREUR BDD", f"Échec du vidage : {e}")
 
-def enregistrer_routeur(ip, port, cle):
+def enregistrer_ou_mettre_a_jour_routeur(ip, port, cle):
     conn = get_db_connection()
-    if conn:
+    if not conn: return None
+    
+    cursor = conn.cursor()
+    
+    # 1. Vérifier si l'IP/Port existe déjà
+    # La vérification par IP est suffisante si l'IP est censée être fixe.
+    # On vérifie l'IP ET le Port car l'IP seule pourrait être utilisée par autre chose
+    check_query = "SELECT id FROM TableRoutage WHERE ip = %s AND port = %s"
+    cursor.execute(check_query, (ip, port))
+    resultat = cursor.fetchone()
+    
+    nouvelle_id = None
+    
+    if resultat:
+        routeur_id = resultat[0]
+        update_query = "UPDATE TableRoutage SET cle = %s WHERE id = %s"
+        
         try:
-            cursor = conn.cursor()
-            query = "INSERT INTO TableRoutage (ip, port, cle) VALUES (%s, %s, %s)"
-            cursor.execute(query, (ip, port, cle))
+            cursor.execute(update_query, (cle, routeur_id))
+            conn.commit()
+            journalisation_log("MASTER", "MISE A JOUR", f"Routeur {ip}:{port} (ID {routeur_id}) mis à jour.")
+            nouvelle_id = routeur_id
+        except Exception as e:
+            journalisation_log("MASTER", "ERREUR BDD", f"Échec UPDATE {ip}: {e}")
+            
+    else:
+        insert_query = "INSERT INTO TableRoutage (ip, port, cle) VALUES (%s, %s, %s)"
+        
+        try:
+            cursor.execute(insert_query, (ip, port, cle))
             conn.commit()
             nouvelle_id = cursor.lastrowid
-            conn.close()
-            return nouvelle_id
+            journalisation_log("MASTER", "INSCRIPTION", f"Nouveau routeur {ip}:{port} enregistré (ID {nouvelle_id}).")
         except Exception as e:
-            journalisation_log("MASTER", "ERREUR BDD", f"Échec de l'enregistrement : {e}")
-            return None
-    return None
+            journalisation_log("MASTER", "ERREUR BDD", f"Échec INSERT {ip}: {e}")
+
+    conn.close()
+    return nouvelle_id
     
 def get_ip_par_id(id_routeur):
     conn = get_db_connection()
@@ -103,7 +128,7 @@ def handle_client(conn, addr):
                     port_r = parties[1]
                     cle_r = parties[2]
                     
-                    nouvelle_id = enregistrer_routeur(ip_r, port_r, cle_r)
+                    nouvelle_id = enregistrer_ou_mettre_a_jour_routeur(ip_r, port_r, cle_r)
                     if nouvelle_id:
                         journalisation_log("MASTER", "INSCRIPTION", f"Routeur {ip_r}:{port_r} enregistré (ID {nouvelle_id}).")
                         conn.sendall(f"ACK|{nouvelle_id}".encode())

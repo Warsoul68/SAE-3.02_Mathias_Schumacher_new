@@ -64,21 +64,24 @@ class CryptoManager:
                     p = ligne.split(',')
                     self.publique = (int(p[0]), int(p[1]))
 
-                with open(self.f_priv, "r") as f:
+                with open(self.c_priv, "r") as f: 
                     ligne = f.read().strip()
                     p = ligne.split(',')
                     self.privee = (int(p[0]), int(p[1]))
                 return
             except:
                 print("[Crypto] Erreur lecture. On régénère.")
+                return
+            
         print("[Crypto] Génération nouvelle paire RSA...")
         self.publique, self.privee = generer_paire_cle()
 
+        # CODE AMÉLIORÉ (dans charger_ou_generer, section écriture)
         with open(self.c_pub, "w") as f:
-            f.write(f"{self.publique[0]}, {self.publique[1]}")
-        
+            f.write(f"{self.publique[0]},{self.publique[1]}")
+
         with open(self.c_priv, "w") as f:
-            f.write(f"{self.privee[0]}, {self.privee[1]}")
+            f.write(f"{self.privee[0]},{self.privee[1]}")
 
     def chiffrer(self, message, cle_pub_destinataire=None):
         cle_cible = cle_pub_destinataire if cle_pub_destinataire else self.publique
