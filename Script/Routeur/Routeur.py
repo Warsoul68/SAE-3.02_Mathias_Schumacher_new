@@ -4,6 +4,7 @@ import threading
 import sys
 import datetime
 import time
+import random
 
 # Importation de ma classe de chiffrement RSA maison
 try:
@@ -127,6 +128,70 @@ class Routeur:
             journalisation_log(self.nom_log, "ERREUR", f"Analyse paquet : {e}")
     
     # Fonction client
+    def construire_oignon(self, message, chemin_ids, annuaire, mode="ROUTEUR", ip_c=None, port_c=None):
+        id_sortie = chemin_ids[-1]
+        cle_sortie = annuaire[id_sortie]['cle']
+        
+        if mode == "Client":
+            header = f"RELAY:CLIENT:IP:{ip_c};PORT:{port_c}"
+        else:
+            header = "DEST:FINAL"
+            
+        payload = f"{header}|{message}"
+        paquet_chiffre = self.crypto.chiffrer(payload, cle_sortie)
+
+        routeurs_intermediaires = list(reversed(chemin_ids[:-1]))
+        id_suivant = id_sortie 
+
+        for id_actuel in routeurs_intermediaires:
+            info_suiv = annuaire[id_suivant]
+            cle_actu = annuaire[id_actuel]['cle']
+            
+            instruction = f"NEXT_IP:{info_suiv['ip']};NEXT_PORT:{info_suiv['port']}|{paquet_chiffre}"
+            paquet_chiffre = self.crypto.chiffrer(instruction, cle_actu)
+            id_suivant = id_actuel
+
+        return paquet_chiffre
+
+    def envoyer_message_depuis_routeur(self):
+        if not self.annuaire:
+            print("[!] Annuaire vide. Veuillez synchroniser (Option 1).")
+            return
+
+        print("\nEnvoir d'un message depuis le Routeur")
+        mode = input("Destinataire : (1) Autre Routeur [ID] | (2) Client [IP/Port] : ")
+        
+        msg = input("Message : ")
+        try:
+            nb_sauts = int(input("Nombre de routeurs relais (sauts) : "))
+        except: nb_sauts = 1
+
+        ids_dispos = list(self.annuaire.keys())
+        
+        if mode == "1":
+            target_id = input("Entrez l'ID du routeur destinataire : ")
+            if target_id not in ids_dispos:
+                print("[!] ID inconnu.")
+                return
+            relais = [i for i in ids_dispos if i != target_id]
+            chemin = random.sample(relais, min(nb_sauts-1, len(relais))) + [target_id]
+            paquet = self.construire_oignon(msg, chemin, self.annuaire, mode="ROUTEUR")
+        
+        else:
+            ip_c = input("IP du Client destinataire : ")
+            port_c = int(input("Port du Client destinataire : "))
+            exit_node_id = random.choice(ids_dispos)
+            relais = [i for i in ids_dispos if i != exit_node_id]
+            chemin = random.sample(relais, min(nb_sauts-1, len(relais))) + [exit_node_id]
+            paquet = self.construire_oignon(msg, chemin, self.annuaire, mode="CLIENT", ip_c=ip_c, port_c=port_c)
+        try:
+            id_in = chemin[0]
+            print(f"[*] Envoi de l'oignon via le circuit : {chemin}")
+            self._envoyer_socket(self.annuaire[id_in]['ip'], self.annuaire[id_in]['port'], paquet)
+            print("[+] Message envoyé avec succès dans le réseau.")
+        except Exception as e:
+            print(f"[!] Échec de l'envoi : {e}")
+
     def client_inscription(self):
         try:
             if self.crypto.publique is None:
