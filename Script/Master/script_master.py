@@ -18,7 +18,7 @@ except ImportError:
 class LogBridge(QObject):
     nouveau_signal_log = pyqtSignal(str)
 
-# Configuration initial
+# Configuration initiale
 class PagePort(QWidget):
     port_valide = pyqtSignal(int)
 
@@ -65,33 +65,34 @@ class PageDashboard(QWidget):
     def init_ui(self):
         mise_en_page_global = QVBoxLayout()
 
-        # Le tableau
         groupe_table = QGroupBox("Nœuds du Réseau Oignon (Base de Données)")
         mise_en_page_interne_table = QVBoxLayout()
         
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["ID", "Adresse IP", "Port", "Clé Publique"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.setStyleSheet("background-color: white;")
         mise_en_page_interne_table.addWidget(self.table)
         
         layout_boutons = QHBoxLayout()
         
-        self.btn_refresh = QPushButton("Actualiser la liste")
+        self.btn_refresh = QPushButton("🔄 Actualiser la liste")
         self.btn_refresh.setStyleSheet("padding: 8px; font-weight: bold;")
         self.btn_refresh.clicked.connect(self.charger_donnees_bdd)
 
-        self.btn_clear = QPushButton("Effacer la console")
+        self.btn_clear = QPushButton("🗑️ Effacer la console")
         self.btn_clear.setStyleSheet("padding: 8px;")
         self.btn_clear.clicked.connect(lambda: self.console.clear())
         
         layout_boutons.addWidget(self.btn_refresh)
         layout_boutons.addWidget(self.btn_clear)
         
-        mise_en_page_global.addLayout(layout_boutons)
-        groupe_table.setLayout(mise_en_page_global)
+        mise_en_page_interne_table.addLayout(layout_boutons)
+        
+        groupe_table.setLayout(mise_en_page_interne_table)
+
         mise_en_page_global.addWidget(groupe_table)
 
-        # les logs
         mise_en_page_global.addWidget(QLabel("Activité du serveur :"))
         self.console = QTextEdit()
         self.console.setReadOnly(True)
@@ -103,12 +104,11 @@ class PageDashboard(QWidget):
     def demarrer_serveur(self, port):
         try:
             self.master_backend = Master(port)
-            
             self.installer_hook_logs()
             
             threading.Thread(target=self.master_backend.demarrer_ecoute, daemon=True).start()
             
-            self.ajouter_log_ecran(f"Master opérationnel sur le port{port} ---")
+            self.ajouter_log_ecran(f"Master opérationnel sur le port {port}")
             self.charger_donnees_bdd()
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur lors du démarrage : {e}")
@@ -118,6 +118,7 @@ class PageDashboard(QWidget):
         fonction_originale = MasterModule.journalisation_log
 
         def nouveau_log_intercepteur(qui, type_msg, message, callback=None):
+            # On garde l'écriture dans le fichier original
             fonction_originale(qui, type_msg, message)
 
             heure = datetime.datetime.now().strftime("%H:%M:%S")
@@ -153,7 +154,7 @@ class PageDashboard(QWidget):
 class MasterApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Master panel de contrôle")
+        self.setWindowTitle("Master Panel de Contrôle")
         self.resize(950, 650)
 
         self.stack = QStackedWidget()
