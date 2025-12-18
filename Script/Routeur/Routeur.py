@@ -4,23 +4,22 @@ import sys
 import datetime
 import time
 
-# Import de la classe de chiffrement
+# Import de la classe de chiffrement maison
 try:
     from chiffrement_RSA import CryptoManager
 except ImportError:
-    print("ERREUR : Le fichier chiffrement_RSA.py est introuvable !")
-    sys.exit()
+    print("ERREUR CRITIQUE : Le fichier chiffrement_RSA.py est introuvable !")
+    sys.exit(1)
 
-# Fonction des logs
+# Gestion des logs
 def journalisation_log(qui, type_message, message):
     maintenant = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # On ajoute le port dans le nom pour différencier les fichiers logs
     ligne_log = f"[{maintenant}] [{qui}] [{type_message}] {message}"
     
-    # Affichage console
+    # Affichage de la console
     print(ligne_log)
 
-    # Écriture fichier
+    # écriture du fichier pour les logs
     nom_fichier = f"journal_{qui.lower()}.log"
     try:
         with open(nom_fichier, "a", encoding="utf-8") as f:
@@ -28,166 +27,199 @@ def journalisation_log(qui, type_message, message):
     except Exception as e:
         print(f"Erreur d'écriture log : {e}")
 
+# Classe du routeur
 class Routeur:
-    def __init__(self, port_local, master_ip, master_port):
+    def __init__(self, port_local, ip_master, port_master):
         self.port_local = port_local
-        self.master_ip = master_ip
-        self.master_port = master_port
-        self.nom_log = f"ROUTEUR_{port_local}" # Identifiant pour les logs
+        self.ip_master = ip_master
+        self.port_master = port_master
+        
+        self.nom_log = f"ROUTEUR_{port_local}"
         self.annuaire = {} 
         
-        journalisation_log(self.nom_log, "INIT", f"Démarrage sur port {self.port_local}...")
+        journalisation_log(self.nom_log, "INIT", "Démarrage du Nœud...")
+        
+        # Initialisation de ma classe de chiffrement
         self.crypto = CryptoManager()
         
-    def demarrer(self):
-        # 1. Thread Serveur (Relais)
-        thread_reception = threading.Thread(target=self._ecouter_reseau, daemon=True)
-        thread_reception.start()
-        
-        # 2. Menu interactif (Client)
-        self._menu_interactif()
+        # Vérification clé
+        if self.crypto.publique is None:
+            journalisation_log(self.nom_log, "ERREUR", "Clé publique non chargée (vérifiez chiffrement_RSA.py).")
 
-    # --- LOGIQUE RÉSEAU (SERVEUR) ---
-    def _ecouter_reseau(self):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    def demarrer(self):
+        # Thread pour l'interface routeur
+        thread_ecoute = threading.Thread(target=self._module_ecoute_reseau, daemon=True)
+        thread_ecoute.start()
+        
+        # Thread pour l'interface client
+        self._menu_client()
+    
+    # Module d'écoute 
+    def _module_ecoute_reseau(self):
+        socketTCP_routeur = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        socketTCP_routeur.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            s.bind(("0.0.0.0", self.port_local))
-            s.listen(5)
-            journalisation_log(self.nom_log, "RESEAU", f"Écoute active sur le port {self.port_local}")
+            socketTCP_routeur.bind(("0.0.0.0", self.port_local))
+            socketTCP_routeur.listen(5)
+            journalisation_log(self.nom_log, "ECOUTE", f"Prêt à relayer sur le port {self.port_local}")
         except Exception as e:
-            journalisation_log(self.nom_log, "ERREUR", f"Liaison port impossible : {e}")
+            journalisation_log(self.nom_log, "FATAL", f"Impossible d'ouvrir le port d'écoute : {e}")
             return
 
         while True:
-            client, addr = s.accept()
-            donnees = self._recevoir_tout(client)
+            connexion_entrante, addr = socketTCP_routeur.accept()
+            donnees = self._recevoir_tout(connexion_entrante)
+            
             if donnees:
-                journalisation_log(self.nom_log, "FLUX", f"Paquet reçu de {addr[0]}")
-                threading.Thread(target=self._traiter_message, args=(donnees,)).start()
-            client.close()
+                # DEBUG : Vérification du chiffrement ---
+                try:
+                    apercu = donnees.decode('utf-8')
+                    if len(apercu) > 50: apercu = apercu[:50] + "..."
+                    type_msg = "🔒 CRYPTÉ" if (len(apercu) > 0 and apercu[0].isdigit()) else "⚠️ CLAIR"
+                    print(f"\n[flux entrant] {type_msg} De {addr[0]} : {apercu}")
+                except:
+                    print(f"\n[flux entrant] Données binaires reçues.")
 
-    def _recevoir_tout(self, sock):
+                threading.Thread(target=self._analyser_paquet, args=(donnees,)).start()
+            connexion_entrante.close()
+    
+    def _recevoir_tout(self, socketTCPrecevoir):
         contenu = b""
-        sock.settimeout(2)
+        socketTCPrecevoir.settimeout(2)
         try:
             while True:
-                partie = sock.recv(4096)
+                partie = socketTCPrecevoir.recv(4096)
                 if not partie: break
                 contenu += partie
         except: pass
         return contenu
-
-    def _traiter_message(self, donnees_brutes):
+    
+    def _analyser_paquet(self, donnees_chiffrees):
         try:
-            # Déchiffrement avec ta classe CryptoManager
-            message_clair = self.crypto.dechiffrer(donnees_brutes)
+            message_str = donnees_chiffrees.decode('utf-8')
+            message_clair = self.crypto.dechiffrer(message_str)
             
             if not message_clair or "|" not in message_clair:
-                journalisation_log(self.nom_log, "ALERTE", "Message illisible ou mal chiffré.")
                 return
 
-            commande, reste = message_clair.split("|", 1)
+            commande, reste_du_paquet = message_clair.split("|", 1)
             
             if "NEXT_IP" in commande:
-                # CAS : RELAIS
                 infos = self._parser_headers(commande)
-                journalisation_log(self.nom_log, "RELAIS", f"➡️ Transmission vers {infos['NEXT_IP']}:{infos['NEXT_PORT']}")
-                self._envoyer_socket(infos['NEXT_IP'], int(infos['NEXT_PORT']), reste)
+                ip_suiv = infos['NEXT_IP']
+                port_suiv = int(infos['NEXT_PORT'])
+                
+                journalisation_log(self.nom_log, "ROUTAGE", f"Relayage vers -> {ip_suiv}:{port_suiv}")
+                self._envoyer_socket(ip_suiv, port_suiv, reste_du_paquet)
                 
             elif "DEST:FINAL" in commande:
-                # CAS : DESTINATION FINALE
-                journalisation_log(self.nom_log, "RECEPTION", f"🏁 Message final reçu : {reste}")
-                print("\n(Appuyez sur Entrée pour revenir au menu)")
+                journalisation_log(self.nom_log, "ARRIVEE", f"Message reçu : {reste_du_paquet}")
+                print("\n(Appuyez sur Entrée pour rafraîchir le menu)")
 
         except Exception as e:
-            journalisation_log(self.nom_log, "ERREUR", f"Déchiffrement impossible : {e}")
-
-    # --- LOGIQUE INTERFACE (CLIENT) ---
-    def _menu_interactif(self):
+            journalisation_log(self.nom_log, "ERREUR", f"Problème lors de l'analyse : {e}")
+    
+    # Module client
+    def _menu_client(self):
+        time.sleep(1)
         while True:
-            print(f"\n--- 🌐 MODE HYBRIDE (Port: {self.port_local}) ---")
+            print(f"\n Noeud du réseau ({self.port_local})")
             print("1. S'inscrire au Master")
-            print("2. Actualiser l'annuaire")
-            print("3. Envoyer un message (Oignon)")
-            print("q. Quitter")
+            print("2. Mettre à jour l'annuaire")
+            print("3. Envoyer un message (Mode Client)")
+            print("0. Quitter")
             
-            choix = input("\nAction > ")
-            if choix == "1": self.action_inscription()
-            elif choix == "2": self.action_recuperer_annuaire()
-            elif choix == "3": self.action_envoyer_oignon()
-            elif choix == "q": break
-
-    def action_inscription(self):
+            choix = input("Choix > ")
+            
+            if choix == "1": self.client_inscription()
+            elif choix == "2": self.client_recuperer_annuaire()
+            elif choix == "3": self.client_envoyer_oignon()
+            elif choix == "0": break
+    
+    def client_inscription(self):
         try:
-            e, n = self.crypto.c_pub
-            # Format attendu par ton Master : INSCRIPTION|IP|PORT|CLE
+            if self.crypto.publique is None:
+                print("Erreur : Pas de clé publique !")
+                return
+
+            e, n = self.crypto.publique
+            
             mon_ip = socket.gethostbyname(socket.gethostname())
+            
             requete = f"INSCRIPTION|{mon_ip}|{self.port_local}|{e},{n}"
             
-            self._envoyer_socket(self.master_ip, self.master_port, requete)
-            journalisation_log(self.nom_log, "MASTER", "Demande d'inscription envoyée.")
+            self._envoyer_socket(self.ip_master, self.port_master, requete)
+            journalisation_log(self.nom_log, "CLIENT", "Inscription envoyée au Master.")
+            
         except Exception as e:
-            journalisation_log(self.nom_log, "ERREUR", f"Échec inscription : {e}")
-
-    def action_recuperer_annuaire(self):
+            journalisation_log(self.nom_log, "ERREUR", f"Inscription impossible : {e}")
+    
+    def client_recuperer_annuaire(self):
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((self.master_ip, self.master_port))
-            s.sendall(b"REQ_LIST_KEYS")
-            reponse = self._recevoir_tout(s).decode('utf-8')
-            s.close()
-
-            # Parsing l'annuaire
+            socketTCP_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            socketTCP_client.connect((self.ip_master, self.port_master))
+            socketTCP_client.sendall(b"REQ_LIST_KEYS")
+            reponse = self._recevoir_tout(socketTCP_client).decode('utf-8')
+            socketTCP_client.close()
             self.annuaire = {}
-            for ligne in reponse.split('\n'):
+            lignes = reponse.split('\n')
+            
+            for ligne in lignes:
                 if "ID:" in ligne:
                     d = self._parser_headers(ligne)
-                    k = d['KEY'].split(',')
+                    k_parts = d['KEY'].split(',')
+                    cle_tuple = (int(k_parts[0]), int(k_parts[1]))
+                    
                     self.annuaire[d['ID']] = {
-                        'ip': d['IP'], 'port': int(d['PORT']),
-                        'cle': (int(k[0]), int(k[1]))
+                        'ip': d['IP'],
+                        'port': int(d['PORT']),
+                        'cle': cle_tuple
                     }
-            journalisation_log(self.nom_log, "ANNUAIRE", f"{len(self.annuaire)} routeurs chargés.")
+            journalisation_log(self.nom_log, "CLIENT", f"Annuaire mis à jour ({len(self.annuaire)} nœuds).")
+            
         except Exception as e:
-            journalisation_log(self.nom_log, "ERREUR", f"Échec annuaire : {e}")
-
-    def action_envoyer_oignon(self):
-        if not self.annuaire:
-            print("❌ Annuaire vide.")
+            journalisation_log(self.nom_log, "ERREUR", f"Récupération annuaire : {e}")
+    
+    def client_envoyer_oignon(self):
+        if len(self.annuaire) < 2:
+            print("Annuaire vide pour faire du routage oignon.")
             return
-        
-        print("\n--- Routeurs Disponibles ---")
+
+        print("\n Nœuds disponibles")
         for rid, info in self.annuaire.items():
-            print(f"ID {rid} | {info['ip']}:{info['port']}")
+            print(f"ID {rid} -> {info['ip']}:{info['port']}")
         
-        id_dest = input("\nID destination finale : ")
-        msg_final = input("Message secret : ")
+        id_dest = input("ID Destinataire : ")
+        if id_dest not in self.annuaire: return print("ID Inconnu.")
+            
+        msg_clair = input("Message : ")
 
         try:
-            # 1. Couche finale
             cle_dest = self.annuaire[id_dest]['cle']
-            paquet = self.crypto.chiffrer(f"DEST:FINAL|{msg_final}", cle_dest)
+            payload = f"DEST:FINAL|{msg_clair}"
+            paquet_final = self.crypto.chiffrer(payload, cle_dest)
 
-            # 2. Couche relais
-            id_relais = input("ID du relais intermédiaire : ")
+            id_relais = input("ID du Relais : ")
+            if id_relais not in self.annuaire: return print("ID Relais inconnu.")
+
             cle_relais = self.annuaire[id_relais]['cle']
             info_dest = self.annuaire[id_dest]
             
-            instruction = f"NEXT_IP:{info_dest['ip']};NEXT_PORT:{info_dest['port']}|{paquet}"
+            instruction = f"NEXT_IP:{info_dest['ip']};NEXT_PORT:{info_dest['port']}|{paquet_final}"
             paquet_complet = self.crypto.chiffrer(instruction, cle_relais)
 
-            # 3. Envoi
-            journalisation_log(self.nom_log, "ENVOI", f"Envoi oignon vers {id_relais}")
+            journalisation_log(self.nom_log, "CLIENT", f"Envoi du paquet via le relais {id_relais}")
             self._envoyer_socket(self.annuaire[id_relais]['ip'], self.annuaire[id_relais]['port'], paquet_complet)
+            
         except Exception as e:
-            journalisation_log(self.nom_log, "ERREUR", f"Construction oignon échouée : {e}")
-
+            journalisation_log(self.nom_log, "ERREUR", f"Création oignon : {e}")
+    
+    # Outils
     def _envoyer_socket(self, ip, port, message):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((ip, port))
-        s.sendall(message.encode('utf-8') if isinstance(message, str) else message)
-        s.close()
+        socketTCPenvoyer = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        socketTCPenvoyer.connect((ip, port))
+        socketTCPenvoyer.sendall(message.encode('utf-8'))
+        socketTCPenvoyer.close()
 
     def _parser_headers(self, chaine):
         res = {}
