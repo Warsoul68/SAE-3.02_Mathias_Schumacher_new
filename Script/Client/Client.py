@@ -11,7 +11,7 @@ except ImportError:
     print("ERREUR : chiffrement_RSA.py manquant.")
     sys.exit(1)
 
-# systeme de callback des logs
+# Système de callback pour les logs
 CALLBACK_LOG_CLIENT = None
 def definir_callback_client(fonction):
     global CALLBACK_LOG_CLIENT
@@ -25,7 +25,6 @@ def journalisation_log(qui, type_message, message):
         try: CALLBACK_LOG_CLIENT(ligne_log)
         except: pass
 
-# Classe Client
 class Client:
     def __init__(self, routeur_ip, routeur_port, port_ecoute_local):
         self.Routeur_IP = routeur_ip
@@ -33,23 +32,23 @@ class Client:
         self.Port_en_ecoute = port_ecoute_local
         self.crypto_outils = CryptoManager()
         self.annuaire_cache = {}
-        
         self._lancer_ecoute_reception()
-        journalisation_log("CLIENT", "INIT", f"Connecté à la Passerelle {self.Routeur_IP}:{self.Routeur_Port}")
+        journalisation_log("CLIENT", "INIT", f"Prêt sur le port {self.Port_en_ecoute}. Passerelle : {self.Routeur_IP}:{self.Routeur_Port}")
 
     def _lancer_ecoute_reception(self):
+        """Lance un thread qui attend les messages venant du réseau oignon"""
         t = threading.Thread(target=self._ecouter_message_entrants, daemon=True)
         t.start()
 
     def _ecouter_message_entrants(self):
-        socketTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        socketTCP.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        socketTCPentrant = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        socketTCPentrant.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            socketTCP.bind(("0.0.0.0", self.Port_en_ecoute)) 
-            socketTCP.listen(5)
+            socketTCPentrant.bind(("0.0.0.0", self.Port_en_ecoute)) 
+            socketTCPentrant.listen(5)
             while True:
                 try:
-                    conn, addr = socketTCP.accept()
+                    conn, addr = socketTCPentrant.accept()
                     data = conn.recv(8192)
                     if data:
                         message = data.decode('utf-8', errors='ignore')
@@ -57,41 +56,41 @@ class Client:
                     conn.close()
                 except: pass
         except Exception as e:
-            journalisation_log("CLIENT", "ERREUR", f"Erreur écoute : {e}")
+            journalisation_log("CLIENT", "ERREUR", f"Erreur écoute réception : {e}")
     
     def recuperer_annuaire_complet(self):
         try:
-            socketTCPannuaire = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            socketTCPannuaire.settimeout(5)
-            socketTCPannuaire.connect((self.Routeur_IP, self.Routeur_Port))
-            socketTCPannuaire.sendall(b"REQ_LIST_KEYS")
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(5)
+            s.connect((self.Routeur_IP, self.Routeur_Port))
+            s.sendall(b"REQ_LIST_KEYS")
             
             reponse = b""
             while True:
-                partie = socketTCPannuaire.recv(4096)
+                partie = s.recv(4096)
                 if not partie: break
                 reponse += partie
-            socketTCPannuaire.close()
+            s.close()
             
             annuaire = {}
             for ligne in reponse.decode("utf-8").split('\n'):
                 if "ID:" in ligne:
-                    parts = ligne.replace('|', ';').split(';')
-                    infos = {p.split(':')[0]: p.split(':')[1] for p in parts if ':' in p}
+                    parties = ligne.replace('|', ';').split(';')
+                    infos = {p.split(':')[0]: p.split(':')[1] for p in parties if ':' in p}
                     k = infos['KEY'].split(',')
                     annuaire[infos['ID']] = {
-                        'ip': infos['IP'], 'port': int(infos['PORT']),
+                        'ip': infos['IP'], 
+                        'port': int(infos['PORT']),
                         'cle': (int(k[0]), int(k[1]))
                     }
             self.annuaire_cache = annuaire
-            journalisation_log("CLIENT", "INFO", f"{len(annuaire)} nœuds chargés.")
+            journalisation_log("CLIENT", "INFO", f"{len(annuaire)} nœuds réseau chargés.")
             return annuaire
         except Exception as e:
-            journalisation_log("CLIENT", "ERREUR", f"Annuaire : {e}")
+            journalisation_log("CLIENT", "ERREUR", f"Impossible de récupérer l'annuaire : {e}")
             return {}
     
-    # Construction de l'oignon
-    def construire_oignon(self, message, chemin_ids, annuaire, mode="ROUTEUR", ip_c=None, port_c=None):
+    def construire_oignon(self, message, chemin_ids, annuaire, mode="CLIENT", ip_c=None, port_c=None):
         id_sortie = chemin_ids[-1]
         cle_sortie = annuaire[id_sortie]['cle']
         
@@ -108,43 +107,43 @@ class Client:
         for id_actuel in routeurs_intermediaires:
             info_suiv = annuaire[id_suivant]
             cle_actu = annuaire[id_actuel]['cle']
-            
             instruction = f"NEXT_IP:{info_suiv['ip']};NEXT_PORT:{info_suiv['port']}|{paquet_chiffre}"
             paquet_chiffre = self.crypto_outils.chiffrer(instruction, cle_actu)
             id_suivant = id_actuel
 
         return paquet_chiffre
     
-    def envoyer_message(self, cible, message, nb_sauts, mode="ROUTEUR"):
-        if not self.annuaire_cache: self.recuperer_annuaire_complet()
+    def envoyer_message(self, cible, message, nb_sauts):
+        if not self.annuaire_cache: 
+            self.recuperer_annuaire_complet()
+            
         ids = list(self.annuaire_cache.keys())
         
-        if len(ids) < nb_sauts: return "Erreur: Pas assez de nœuds."
-
-        # Choix du chemin
-        if mode == "ROUTEUR":
-            dest_id = cible
-            relais = [i for i in ids if i != dest_id]
-        else:
-            dest_id = random.choice(ids)
-            relais = [i for i in ids if i != dest_id]
-
-        chemin = random.sample(relais, min(nb_sauts-1, len(relais))) + [dest_id]
+        if len(ids) < nb_sauts: 
+            return "Erreur: Pas assez de routeurs disponibles pour le nombre de sauts demandé."
+        dest_id = random.choice(ids)
+        
+        relais_possibles = [i for i in ids if i != dest_id]
+        chemin = random.sample(relais_possibles, min(nb_sauts-1, len(relais_possibles))) + [dest_id]
         
         try:
-            journalisation_log("CLIENT", "ENVOI", f"Mode {mode} | Chemin : {chemin}")
+            journalisation_log("CLIENT", "OIGNON", f"Création circuit anonyme : {chemin}")
+            ip_dest, port_dest = cible 
+            paquet = self.construire_oignon(message, chemin, self.annuaire_cache, "CLIENT", ip_dest, port_dest)
+            id_entree = chemin[0]
+            ip_entree = self.annuaire_cache[id_entree]['ip']
+            port_entree = self.annuaire_cache[id_entree]['port']
             
-            if mode == "CLIENT":
-                ip_dest, port_dest = cible
-                paquet = self.construire_oignon(message, chemin, self.annuaire_cache, "CLIENT", ip_dest, port_dest)
-            else:
-                paquet = self.construire_oignon(message, chemin, self.annuaire_cache, "ROUTEUR")
-                
-            id_in = chemin[0]
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((self.annuaire_cache[id_in]['ip'], self.annuaire_cache[id_in]['port']))
+            s.connect((ip_entree, port_entree))
             s.sendall(paquet.encode('utf-8'))
             s.close()
+            
+            journalisation_log("CLIENT", "ENVOI", f"Paquet expédié vers l'entrée {id_entree}")
             return "Succès"
+
         except Exception as e:
+            journalisation_log("CLIENT", "ERREUR", f"Échec de l'envoi : {e}")
             return f"Erreur : {e}"
+    
+    
