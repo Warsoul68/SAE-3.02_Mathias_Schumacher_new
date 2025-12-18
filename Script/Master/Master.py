@@ -43,6 +43,22 @@ class Master:
             journalisation_log("MASTER", "ERREUR BDD", f"Échec de connexion : {err}")
             return None
     
+    def get_tous_les_routeurs(self):
+        # On récupére la liste de tout les routeurs
+        conn = self._get_db_connection()
+        if conn:
+            try:
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute("SELECT * FROM TableRoutage")
+                resultats = cursor.fetchall()
+                return resultats
+            except Exception as e:
+                print(f"Erreur lors de la lecture BDD : {e}")
+                return []
+            finally:
+                conn.close()
+        return []
+    
     def _vider_bdd(self):
         conn = self._get_db_connection()
         if conn:
