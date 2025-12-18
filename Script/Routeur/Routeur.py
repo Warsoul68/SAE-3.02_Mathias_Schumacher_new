@@ -1,256 +1,178 @@
-import socket 
+import socket
 import threading
-import datetime
 import sys
+import time
 
+# Import de la classe de chiffrement maison 
 try:
-    from chiffrement_RSA import CryptoManager 
+    from chiffrement_RSA import CryptoManager
 except ImportError:
-    print("ERREUR : Le fichier chiffrement_RSA.py est manquant.")
+    print("ERREUR : Le fichier chiffrement_RSA.py est introuvable !")
     sys.exit()
 
-# Fonctions globale
-
-def journalisation_log(qui, type_message, message):
-    maintenant = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    ligne_log = f"[{maintenant}] [{qui}] [{type_message}] {message}"
-    print(ligne_log)
-    try:
-        nom_fichier = f"journal_{qui.lower()}.log"
-        with open(nom_fichier, "a", encoding="utf-8") as f:
-            f.write(ligne_log + "\n")
-    except:
-        pass
-
-def recevoir_tout(socket_conn):
-    donnees = b""
-    while True:
-        try:
-            partie = socket_conn.recv(65536)
-            if not partie: break
-            donnees += partie
-            if len(partie) < 65536: break
-        except socket.timeout: break
-        except Exception: break
-    return donnees
-
-# --- CLASSE ROUTEUR ---
-
 class Routeur:
-    def __init__(self, master_ip, master_port, port_routeur, recherche_port_client=5002, port_ecoute_client=5003):
-        self.Master_IP = master_ip
-        self.Port_TCP_master = master_port
-        self.Port_Routeur = port_routeur
-        self.Recherche_Port_client = recherche_port_client
-        self.Port_ecoute_client = port_ecoute_client
-        self.Port_UDP_master = 50000 
-        self.mon_crypto = CryptoManager()
-        self.cle_publique = self.mon_crypto.get_pub_avec_str()
-        self.mon_id_interne = "?" 
-        self.mon_ip_locale = self._trouver_mon_ip_locale()
-
-        if self.mon_ip_locale == "127.0.0.1": 
-            journalisation_log("RTR_INIT", "ALERTE", "IP locale 127.0.0.1 détectée. Test en local uniquement.")
-
-        # Phase d'enregistrement
-        if self._enregistrement_Master():
-            self._lancer_services()
-        else:
-            journalisation_log("RTR_ID", "CRITIQUE", "Abandon : Impossible de s'enregistrer auprès du Master.")
-
-    # Méthode interne
-
-    def _trouver_mon_ip_locale(self):
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80)) 
-            mon_ip = s.getsockname()[0]
-            s.close()
-            return mon_ip
-        except:
-            return "127.0.0.1"
-
-    def _enregistrement_Master(self):
-        try:
-            socketTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            socketTCP.settimeout(5)
-            socketTCP.connect((self.Master_IP, self.Port_TCP_master))
-            message = f"INSCRIPTION|{self.mon_ip_locale}|{self.Port_Routeur}|{self.cle_publique}"
-            socketTCP.sendall(message.encode())
-            
-            ack = socketTCP.recv(1024).decode()
-            if "ACK|" in ack:
-                self.mon_id_interne = ack.split('|')[1]
-                journalisation_log(self.mon_id_interne, "INSCRIPTION", f"Succès ! Mon ID réseau est : {self.mon_id_interne}")
-                socketTCP.close()
-                return True
-            
-            journalisation_log("RTR_ID", "ERREUR", f"Réponse Master invalide : {ack}")
-            return False
-        except Exception as e:
-            journalisation_log("RTR_ID", "ERREUR", f"Connexion Master impossible ({self.Master_IP}:{self.Port_TCP_master}) : {e}")
-            return False
-
-    def _lancer_services(self):
-        threading.Thread(target=self.ecouter_recherche_clients, daemon=True).start()
-        self._demarrer_ecoute_tcp()
-
-    # Services de communication
-
-    def demander_ip_au_master(self, id_cible):
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(3)
-            s.connect((self.Master_IP, self.Port_TCP_master))
-            s.sendall(f"REQ_RESOLVE_ID|{id_cible}".encode())
-            reponse = s.recv(1024).decode().strip()
-            s.close()
-            if "ERROR" in reponse: return None, None
-            parties = reponse.split('|')
-            return parties[0], int(parties[1])
-        except:
-            return None, None
-    
-    def recuperer_annuaire_master(self):
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(3)
-            s.connect((self.Master_IP, self.Port_TCP_master))
-            s.sendall(b"REQ_LIST_IDS")
-            liste = s.recv(4096).decode().strip()
-            s.close()
-            return liste
-        except: 
-            return "ERROR"
+    def __init__(self, port_local, master_ip, master_port):
+        self.port_local = port_local
+        self.master_ip = master_ip
+        self.master_port = master_port
+        self.annuaire = {}
+        print(f"[*] Initialisation du module de chiffrement sur le port {self.port_local}...")
+        self.crypto = CryptoManager()
         
-    def recuperer_annuaire_cles(self):
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(3)
-            s.connect((self.Master_IP, self.Port_TCP_master))
-            s.sendall(b"REQ_LIST_KEYS")
-            liste = s.recv(8192).decode().strip()
-            s.close()
-            return liste
-        except: return "ERROR"
-
-    def demander_nb_hops(self):
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(3)
-            s.connect((self.Master_IP, self.Port_TCP_master))
-            s.sendall(b"REQ_NB_ROUTEURS")
-            nb = s.recv(1024).decode().strip()
-            s.close()
-            return nb
-        except: return "?"
+    def demarrer(self):
+        thread_reception = threading.Thread(target=self._ecouter_reseau, daemon=True)
+        thread_reception.start()
+        self._menu_interactif()
     
-    def livrer_au_client_final(self, dest_ip, message):
-        journalisation_log(self.mon_id_interne, "LIVRAISON", f"Relais final vers client {dest_ip}")
+    # Partie Relais et reception
+    def _ecouter_reseau(self):
+        socketTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        socketTCP.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(3)
-            s.connect((dest_ip, self.Port_ecoute_client))
-            s.sendall(message.encode())
-            s.close()
-            journalisation_log(self.mon_id_interne, "LIVRAISON", "Succès.")
+            socketTCP.bind(("0.0.0.0", self.port_local))
+            socketTCP.listen(5)
+            print(f"[RELAIS] Écoute active sur le port {self.port_local}")
         except Exception as e:
-            journalisation_log(self.mon_id_interne, "ERREUR", f"Échec livraison finale : {e}")
+            print(f"[ERREUR] Impossible de lier le port {self.port_local} : {e}")
+            return
 
-    def ecouter_recherche_clients(self):
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            s.bind(('0.0.0.0', self.Recherche_Port_client))
-            journalisation_log(self.mon_id_interne, "UDP", f"Écoute clients sur port {self.Recherche_Port_client}")
-            while True:
-                data, addr = s.recvfrom(1024)
-                if data.decode().strip() == "Ou_est_le_routeur?":
-                    reponse = f"Je_suis_le_routeur|{self.mon_id_interne}|{self.Port_Routeur}"
-                    s.sendto(reponse.encode(), addr)
-        except Exception as e:
-            journalisation_log(self.mon_id_interne, "ERREUR", f"Erreur UDP : {e}")
+        while True:
+            client, addr = socketTCP.accept()
+            donnees = self._recevoir_tout(client)
+            if donnees:
+                threading.Thread(target=self._traiter_message, args=(donnees,)).start()
+            client.close()
 
-    # Traitement des messages
-
-    def handle_connection(self, conn, addr):
-        module_id = self.mon_id_interne 
+    def _recevoir_tout(self, socketTCP):
+        contenu = b""
+        socketTCP.settimeout(2)
         try:
             while True:
-                data_raw = recevoir_tout(conn)
-                if not data_raw: break
-                commande = data_raw.decode().strip()
-                
-                if commande == "REQ_LIST_IDS":
-                    conn.sendall(self.recuperer_annuaire_master().encode())
-        
-                elif commande.startswith("CMD_OIGNON"):
-                    try:
-                        parties = commande.split('|')
-                        blob_chiffre = parties[1]
-                        journalisation_log(module_id, "RECEPTION", f"Oignon reçu de {addr[0]}")
-                        message_clair = self.mon_crypto.dechiffrer(blob_chiffre)
-                        
-                        if "[Erreur]" in message_clair or not message_clair:
-                            journalisation_log(module_id, "ERREUR", "Déchiffrement échoué.")
-                            conn.sendall(b"Erreur Crypto")
-                            continue
-                            
-                        if message_clair.startswith("CMD_FINAL"):
-                            p = message_clair.split('|')
-                            self.livrer_au_client_final(p[1], p[2])
-                            conn.sendall(b"Message Livre")
-                            
-                        elif message_clair.startswith("CMD_RELAY"):
-                            p = message_clair.split('|')
-                            prochaine_id = p[1]
-                            reste_blob = p[2]
-                            
-                            journalisation_log(module_id, "RELAIS", f"Vers ID {prochaine_id}")
-                            prox_ip, prox_port = self.demander_ip_au_master(prochaine_id)
-                            
-                            if prox_ip and prox_port:
-                                try:
-                                    s_prox = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                                    s_prox.settimeout(10)
-                                    s_prox.connect((prox_ip, prox_port))
-                                    s_prox.sendall(f"CMD_OIGNON|{reste_blob}".encode())
-                                    s_prox.close()
-                                    conn.sendall(b"Relaye")
-                                except Exception as e:
-                                    journalisation_log(module_id, "ERREUR", f"Relais impossible : {e}")
-                                    conn.sendall(b"Erreur Relais")
-                            else:
-                                conn.sendall(b"ID Inconnue")
+                partie = socketTCP.recv(4096)
+                if not partie: break
+                contenu += partie
+        except: pass
+        return contenu
+    
+    def _traiter_message(self, donnees_brutes):
+        try:
+            message_clair = self.crypto.dechiffrer(donnees_brutes)
+            
+            if not message_clair or "|" not in message_clair:
+                return
 
-                    except Exception as e:
-                        journalisation_log(module_id, "CRASH", f"Erreur oignon : {e}")
+            commande, reste = message_clair.split("|", 1)
+            
+            if "NEXT_IP" in commande:
+                infos = self._parser_headers(commande)
+                print(f"[RELAIS] Passage du paquet vers {infos['NEXT_IP']}:{infos['NEXT_PORT']}")
+                self._envoyer_socket(infos['NEXT_IP'], int(infos['NEXT_PORT']), reste)
                 
-                elif commande == "CMD_GET_HOPS":
-                    conn.sendall(f"Routeurs : {self.demander_nb_hops()}".encode())
+            elif "DEST:FINAL" in commande:
+                print(f"\n🔔 [MESSAGE FINAL REÇU] : {reste}")
+                print("\n(Appuyez sur Entrée pour revenir au menu)")
 
-                elif commande == "REQ_LIST_KEYS":
-                    conn.sendall(self.recuperer_annuaire_cles().encode())
-                
-                else:
-                    conn.sendall(b"Commande inconnue")
-        
         except Exception as e:
-            journalisation_log(module_id, "ERREUR", f"Socket error : {e}")
-        finally: 
-            conn.close()
+            print(f"[ERREUR TRAITEMENT] Impossible de déchiffrer : {e}")
+    
+    # Partie client
+    def _menu_interactif(self):
+        while True:
+            print(f"\n Routeur Hybride (Local: {self.port_local})")
+            print(f"Cible Master : {self.master_ip}:{self.master_port}")
+            print("1. S'inscrire au Master")
+            print("2. Actualiser l'annuaire (REQ_LIST_KEYS)")
+            print("3. Envoyer un message sécurisé (Oignon)")
+            print("q. Quitter")
+            
+            choix = input("\nAction > ")
+            
+            if choix == "1":
+                self.action_inscription()
+            elif choix == "2":
+                self.action_recuperer_annuaire()
+            elif choix == "3":
+                self.action_envoyer_oignon()
+            elif choix == "q":
+                print("Arrêt du routeur...")
+                break
 
-    def _demarrer_ecoute_tcp(self):
+    def action_inscription(self):
+        try:
+            e, n = self.crypto.cle_publique 
+            requete = f"INSCRIPTION;{self.port_local};{e},{n}"
+            
+            self._envoyer_socket(self.master_ip, self.master_port, requete)
+            print("[+] Demande d'inscription envoyée au Master.")
+        except Exception as e:
+            print(f"[-] Erreur Inscription : {e}")
+
+    def action_recuperer_annuaire(self):
+        try:
+            socketTCPannuaire= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            socketTCPannuaire.connect((self.master_ip, self.master_port))
+            socketTCPannuaire.sendall(b"REQ_LIST_KEYS")
+            reponse = self._recevoir_tout(socketTCPannuaire).decode('utf-8')
+            socketTCPannuaire.close()
+
+            self.annuaire = {}
+            for ligne in reponse.split('\n'):
+                if "ID:" in ligne:
+                    d = self._parser_headers(ligne)
+                    k = d['KEY'].split(',')
+                    self.annuaire[d['ID']] = {
+                        'ip': d['IP'], 
+                        'port': int(d['PORT']),
+                        'cle': (int(k[0]), int(k[1]))
+                    }
+            print(f"[+] Annuaire mis à jour : {len(self.annuaire)} routeurs détectés.")
+        except Exception as e:
+            print(f"[-] Erreur Annuaire : {e}")
+    
+    def action_envoyer_oignon(self):
+        if not self.annuaire:
+            print("❌ Annuaire vide. Faites l'option 2 d'abord.")
+            return
+
+        print("\nRouteur disponible")
+        for rid, info in self.annuaire.items():
+            print(f"ID {rid} | {info['ip']}:{info['port']}")
+        
+        id_dest = input("\nID du destinataire final : ")
+        msg_final = input("Votre message : ")
+
+        # Construction de l'oignon
+        try:
+            cle_dest = self.annuaire[id_dest]['cle']
+            paquet = self.crypto.chiffrer(f"DEST:FINAL|{msg_final}", cle_dest)
+
+            id_relais = input("ID du relais intermédiaire : ")
+            cle_relais = self.annuaire[id_relais]['cle']
+            info_dest = self.annuaire[id_dest]
+            
+            instruction = f"NEXT_IP:{info_dest['ip']};NEXT_PORT:{info_dest['port']}|{paquet}"
+            paquet_complet = self.crypto.chiffrer(instruction, cle_relais)
+
+            self._envoyer_socket(self.annuaire[id_relais]['ip'], self.annuaire[id_relais]['port'], paquet_complet)
+            print("[*] Paquet oignon envoyé dans le réseau.")
+        except Exception as e:
+            print(f"[-] Erreur de construction : {e}")
+    
+    # Outils de réseaux et parsing
+    def _envoyer_socket(self, ip, port, message):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            s.bind(('0.0.0.0', self.Port_Routeur))
-            s.listen(20)
-            journalisation_log(self.mon_id_interne, "TCP", f"Prêt sur port {self.Port_Routeur}")
-            while True:
-                conn, addr = s.accept()
-                threading.Thread(target=self.handle_connection, args=(conn, addr), daemon=True).start()
-        except Exception as e:
-            journalisation_log(self.mon_id_interne, "CRASH", f"Serveur TCP : {e}")
-        finally:
-            s.close()
+        s.connect((ip, port))
+        if isinstance(message, str):
+            s.sendall(message.encode('utf-8'))
+        else:
+            s.sendall(message)
+        s.close()
+
+    def _parser_headers(self, chaine):
+        res = {}
+        parties = chaine.replace('|', ';').split(';')
+        for p in parties:
+            if ':' in p:
+                k, v = p.split(':', 1)
+                res[k.strip()] = v.strip()
+        return res
