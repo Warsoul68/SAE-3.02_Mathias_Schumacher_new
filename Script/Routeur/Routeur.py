@@ -144,12 +144,20 @@ class Routeur:
 
             e, n = self.crypto.publique
             
-            mon_ip = socket.gethostbyname(socket.gethostname())
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect((self.ip_master, self.port_master))
+                mon_ip = s.getsockname()[0]
+                s.close()
+            except Exception:
+                mon_ip = "127.0.0.1"
+
+            print(f"[*] Détection IP : Je m'inscris avec l'IP {mon_ip}")
             
             requete = f"INSCRIPTION|{mon_ip}|{self.port_local}|{e},{n}"
             
             self._envoyer_socket(self.ip_master, self.port_master, requete)
-            journalisation_log(self.nom_log, "CLIENT", "Inscription envoyée au Master.")
+            journalisation_log(self.nom_log, "CLIENT", f"Inscription envoyée ({mon_ip}).")
             
         except Exception as e:
             journalisation_log(self.nom_log, "ERREUR", f"Inscription impossible : {e}")
