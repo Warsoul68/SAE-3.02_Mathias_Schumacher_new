@@ -89,7 +89,7 @@ class PageMessagerie(QWidget):
         groupe = QGroupBox("Envoi de Message")
         mise_en_page_groupe = QVBoxLayout()
         
-        self.btn_annuaire = QPushButton("🔄 Télécharger l'Annuaire")
+        self.btn_annuaire = QPushButton("Télécharger l'Annuaire")
         self.btn_annuaire.clicked.connect(self.get_annuaire)
         mise_en_page_groupe.addWidget(self.btn_annuaire)
 
@@ -113,12 +113,10 @@ class PageMessagerie(QWidget):
         l_routeur.addRow("ID du Routeur :", self.in_r_id)
         self.table_routeur.setLayout(l_routeur)
 
-        self.tables.addTab(self.table_client, "📤 Vers un Client (IP)")
-        self.tables.addTab(self.table_routeur, "🔒 Vers un Nœud (ID)")
+        self.tables.addTab(self.table_client, "Vers un Client (IP)")
+        self.tables.addTab(self.table_routeur, "Vers un Nœud (ID)")
 
         mise_en_page_groupe.addWidget(self.tables)
-
-        # Options communes (Sauts + Message)
         l_common = QHBoxLayout()
         self.spin_sauts = QSpinBox()
         self.spin_sauts.setRange(1, 1)
@@ -129,7 +127,7 @@ class PageMessagerie(QWidget):
 
         l_msg = QHBoxLayout()
         self.in_msg = QLineEdit()
-        self.in_msg.setPlaceholderText("Votre message secret...")
+        self.in_msg.setPlaceholderText("Votre message...")
         self.btn_send = QPushButton("Envoyer")
         self.btn_send.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
         self.btn_send.clicked.connect(self.envoyer)
@@ -183,7 +181,7 @@ class PageMessagerie(QWidget):
         # On regarde quel onglet est actif
         index = self.tables.currentIndex()
         
-        if index == 0: # Onglet CLIENT (IP)
+        if index == 0:
             ip = self.in_c_ip.text().strip()
             try: port = int(self.in_c_port.text())
             except: return QMessageBox.warning(self, "Erreur", "Port invalide.")
