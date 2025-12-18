@@ -3,14 +3,14 @@ from Routeur import Routeur
 
 def main():
     print("\n" + "="*50)
-    print("   Lancement du nœud réseau (Mode Hybride)")
+    print("Lancement du nœud réseau (Mode Hybride)")
     print("="*50)
 
-    # 1. On vérifie que le port du routeur est passé en argument
+    # 1. Vérification du port
     if len(sys.argv) < 2:
         print("\n[!] ERREUR : Port local manquant.")
         print("Usage : python3 script_routeur.py <PORT_DU_ROUTEUR>")
-        print("Exemple : python3 script_routeur.py 8080\n")
+        print("Exemple : python3 script_routeur.py 8081\n")
         sys.exit(1)
 
     try:
@@ -21,11 +21,15 @@ def main():
     
     print(f"\n[*] Configuration de l'accès au Master pour le port {port_local}")
     
-    ip_master = input("Entrez l'IP du Master (ex: 10.128.200.15) : ")
+    ip_master = input("Entrez l'IP du Master (ex: 192.168.1.34) : ")
     
     while True:
         try:
-            port_master = int(input("Entrez le Port du Master (ex: 8080) : "))
+            port_master_input = input("Entrez le Port du Master (ex: 8080) : ")
+            if not port_master_input:
+                port_master = 8080
+            else:
+                port_master = int(port_master_input)
             break
         except ValueError:
             print("[!] Erreur : Le port doit être un nombre.")
@@ -34,6 +38,7 @@ def main():
         mon_routeur = Routeur(port_local, ip_master, port_master)
         
         print("\n" + "-"*50)
+        print(f"Nœud démarré. En attente d'instructions...")
         mon_routeur.demarrer()
         
     except KeyboardInterrupt:
