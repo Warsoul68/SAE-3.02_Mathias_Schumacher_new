@@ -71,17 +71,34 @@ class Routeur:
             donnees = self._recevoir_tout(connexion_entrante)
             
             if donnees:
-                # DEBUG : Vérification du chiffrement ---
+                try:
+                    message_str = donnees.decode('utf-8')
+                    if message_str == "REQ_LIST_KEYS":
+                        journalisation_log(self.nom_log, "CLIENT", f"Envoi de l'annuaire local à {addr[0]}")
+                        
+                        lignes = []
+                        for rid, info in self.annuaire.items():
+                            cle_tuple = info['cle']
+                            cle_str = f"{cle_tuple[0]},{cle_tuple[1]}"
+                            lignes.append(f"ID:{rid};IP:{info['ip']};PORT:{info['port']};KEY:{cle_str}")
+                        
+                        reponse = "\n".join(lignes)
+                        connexion_entrante.sendall(reponse.encode('utf-8'))
+                        connexion_entrante.close()
+                        continue
+                except:
+                    pass
                 try:
                     apercu = donnees.decode('utf-8')
                     if len(apercu) > 50: apercu = apercu[:50] + "..."
                     type_msg = "🔒 CRYPTÉ" if (len(apercu) > 0 and apercu[0].isdigit()) else "⚠️ CLAIR"
                     print(f"\n[flux entrant] {type_msg} De {addr[0]} : {apercu}")
-                except:
-                    print(f"\n[flux entrant] Données binaires reçues.")
+                except: pass
 
                 threading.Thread(target=self._analyser_paquet, args=(donnees,)).start()
-            connexion_entrante.close()
+            try:
+                connexion_entrante.close()
+            except: pass
     
     def _recevoir_tout(self, socketTCPrecevoir):
         contenu = b""
