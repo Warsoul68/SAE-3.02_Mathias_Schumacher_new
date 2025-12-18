@@ -99,7 +99,7 @@ class Routeur:
 
     def action_inscription(self):
         try:
-            e, n = self.crypto.cle_publique 
+            e, n = self.crypto.c_pub 
             requete = f"INSCRIPTION;{self.port_local};{e},{n}"
             
             self._envoyer_socket(self.master_ip, self.master_port, requete)
