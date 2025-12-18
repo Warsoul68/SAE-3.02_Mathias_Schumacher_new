@@ -5,7 +5,7 @@ from Routeur import Routeur
 
 def afficher_titre(port):
     print("\n" + "="*50)
-    print(f" Noeud routeur Hybride {port}")
+    print(f"Noeud Hybride {port}")
     print("="*50)
 
 def main():
@@ -13,9 +13,15 @@ def main():
         print("\n[!] Port manquant. Usage: python3 script_routeur.py <PORT>")
         sys.exit(1)
 
-    port_local = int(sys.argv[1])
+    try:
+        port_local = int(sys.argv[1])
+    except ValueError:
+        print("\n[!] Le port doit être un nombre entier.")
+        sys.exit(1)
+
     ip_master = input("Entrez l'IP du Master (ex: 192.168.1.34) : ")
-    port_master = int(input("Entrez le Port du Master (ex: 8080) : ") or 8080)
+    port_master_in = input("Entrez le Port du Master (8080 par défaut) : ")
+    port_master = int(port_master_in) if port_master_in else 8080
 
     try:
         mon_routeur = Routeur(port_local, ip_master, port_master)
@@ -23,12 +29,14 @@ def main():
         thread_serveur.start()
         
         afficher_titre(port_local)
+
+        # Menu principal
         while True:
             print("\nMenu principal :")
-            print("1. S'inscrire & Sync Annuaire (Auto)")
-            print("2. Afficher l'Annuaire local")
-            print("3. ENVOYER UN MESSAGE")
-            print("0. Quitter")
+            print("1.S'inscrire & Sync Annuaire (Auto)")
+            print("2.Afficher l'Annuaire local")
+            print("3.ENVOYER UN MESSAGE")
+            print("0. ❌ Quitter")
             
             choix = input("\nAction > ").lower()
 
@@ -37,62 +45,61 @@ def main():
             
             elif choix == "2":
                 if not mon_routeur.annuaire:
-                    print("[!] Annuaire vide. Synchronisez d'abord.")
+                    print("[!] Annuaire vide. Synchronisez d'abord (Option 1).")
                 else:
-                    print(f"\nNœuds connus ({len(mon_routeur.annuaire)}) :")
+                    print(f"\nNœuds connus dans le réseau ({len(mon_routeur.annuaire)}) :")
                     for rid, info in mon_routeur.annuaire.items():
                         print(f" - ID {rid} : {info['ip']}:{info['port']}")
 
             elif choix == "3":
                 if not mon_routeur.annuaire:
-                    print("[!] Erreur : Vous devez avoir l'annuaire pour envoyer.")
+                    print("[!] Erreur : L'annuaire est nécessaire pour choisir des relais.")
                     continue
                 
-                print("\nEnvoi d'un message :")
-                print("(a) Vers un autre Routeur (via ID)")
-                print("(b) Vers une Interface Client (via IP/Port)")
-                type_dest = input("Type de cible > ").lower()
+                print("\nEnvoie")
+                target_ip = input("IP de la cible (Client ou Routeur) : ")
+                try:
+                    target_port = int(input("Port de la cible : "))
+                except:
+                    print("[!] Port invalide.")
+                    continue
                 
-                msg = input("Votre message : ")
-                nb_sauts = int(input("Nombre de routeurs relais : ") or 1)
+                msg = input("Message à envoyer : ")
+                nb_sauts = int(input("Nombre de relais (sauts) : ") or 1)
                 
                 ids_dispos = list(mon_routeur.annuaire.keys())
                 
-                if type_dest == "a":
-                    id_cible = input("ID du routeur cible : ")
-                    if id_cible not in ids_dispos:
-                        print("[!] ID inconnu.")
-                        continue
-                    relais = [i for i in ids_dispos if i != id_cible]
-                    chemin = random.sample(relais, min(nb_sauts-1, len(relais))) + [id_cible]
-                    paquet = mon_routeur.construire_oignon(msg, chemin, mon_routeur.annuaire, mode="ROUTEUR")
+                id_exit = random.choice(ids_dispos)
                 
-                elif type_dest == "b":
-                    ip_c = input("IP du Client cible : ")
-                    port_c = int(input("Port du Client cible : "))
-                    id_exit = random.choice(ids_dispos)
-                    relais = [i for i in ids_dispos if i != id_exit]
-                    chemin = random.sample(relais, min(nb_sauts-1, len(relais))) + [id_exit]
-                    paquet = mon_routeur.construire_oignon(msg, chemin, mon_routeur.annuaire, mode="CLIENT", ip_c=ip_c, port_c=port_c)
+                relais_possibles = [i for i in ids_dispos if i != id_exit]
+                chemin = random.sample(relais_possibles, min(nb_sauts-1, len(relais_possibles))) + [id_exit]
                 
-                else:
-                    print("[!] Choix invalide.")
-                    continue
                 try:
+                    paquet = mon_routeur.construire_oignon(
+                        message=msg, 
+                        chemin_ids=chemin, 
+                        annuaire=mon_routeur.annuaire, 
+                        mode="CLIENT", 
+                        ip_c=target_ip, 
+                        port_c=target_port
+                    )
+                    
                     premier_id = chemin[0]
-                    target = mon_routeur.annuaire[premier_id]
-                    mon_routeur._envoyer_socket(target['ip'], target['port'], paquet)
-                    print(f"[OK] Message envoyé via le circuit : {chemin}")
+                    target_relais = mon_routeur.annuaire[premier_id]
+                    mon_routeur._envoyer_socket(target_relais['ip'], target_relais['port'], paquet)
+                    
+                    print(f"[OK] Message envoyé anonymement via le circuit : {chemin}")
                 except Exception as e:
-                    print(f"[!] Erreur d'envoi : {e}")
+                    print(f"[!] Erreur lors de la préparation : {e}")
 
-            elif choix == "q":
+            elif choix == "0":
+                print("Fermeture du nœud...")
                 break
 
     except KeyboardInterrupt:
-        print("\nArrêt.")
+        print("\n[!] Interruption par l'utilisateur.")
     except Exception as e:
-        print(f"\nErreur : {e}")
+        print(f"\n[!] Erreur fatale : {e}")
 
 if __name__ == "__main__":
     main()
