@@ -10,7 +10,7 @@ from PyQt5.QtCore import pyqtSignal, QObject, Qt
 
 # Import de la classe Master
 try:
-    from Master import Master, journalisation_log
+    from Script.Master.Master import Master, journalisation_log
 except ImportError:
     print("ERREUR : Master.py est introuvable dans le répertoire courant !")
     sys.exit()
@@ -114,7 +114,7 @@ class PageDashboard(QWidget):
             QMessageBox.critical(self, "Erreur", f"Erreur lors du démarrage : {e}")
     
     def installer_hook_logs(self):
-        import Master as MasterModule   
+        import Script.Master.Master as MasterModule   
         fonction_originale = MasterModule.journalisation_log
 
         def nouveau_log_intercepteur(qui, type_msg, message, callback=None):
