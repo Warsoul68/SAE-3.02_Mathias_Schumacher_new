@@ -65,13 +65,12 @@
         <task id="13" uid="11f596793d3449d885caa54241acae54" name="Journalisation des log" meeting="false" start="2025-12-15" duration="1" complete="100" priority="0" expand="true">
             <depend id="19" type="2" difference="0" hardness="Strong"/>
         </task>
-        <task id="19" uid="2791be6a7e444aa3b263ccadc45cd1e9" name="Teste de l'application + codage de l'interface + conversion des script en classe" meeting="false" start="2025-12-16" duration="3" complete="50" expand="true">
+        <task id="19" uid="2791be6a7e444aa3b263ccadc45cd1e9" name="Teste de l'application + codage de l'interface + conversion des script en classe" meeting="false" start="2025-12-16" duration="4" complete="75" priority="2" expand="true">
             <depend id="14" type="2" difference="0" hardness="Strong"/>
         </task>
-        <task id="14" uid="a0ab43c6d0334af3beb47c7ef12db4a6" name="Rédaction de la documentation de réponse au cahier des charge" meeting="false" start="2025-12-19" duration="3" complete="0" expand="true">
-            <depend id="15" type="2" difference="0" hardness="Strong"/>
+        <task id="14" uid="a0ab43c6d0334af3beb47c7ef12db4a6" name="Rédaction de la documentation de réponse au cahier des charge plus document d'installation" meeting="false" start="2025-12-20" duration="4" complete="0" expand="true">
+            <notes><![CDATA[Faire aussi le Readme]]></notes>
         </task>
-        <task id="15" uid="ba45036ec41042daa367e55b357f96ac" name="Rédaction des document d'installation" meeting="false" start="2025-12-22" duration="2" complete="0" expand="true"/>
         <task id="16" uid="859aaf0e819c4872a53a1acb1c27278e" name="Faire la vidéo de démonstration" meeting="false" start="2025-12-26" duration="1" complete="0" expand="true">
             <depend id="18" type="2" difference="0" hardness="Strong"/>
         </task>
