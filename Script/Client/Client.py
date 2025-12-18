@@ -84,17 +84,17 @@ class Client:
     def recuperer_annuaire_complet(self):
         journalisation_log("CLIENT", "ANNUAIRE", f"Demande d'annuaire au routeur {self.Routeur_IP_Passerelle}")
         
+        reponse = ""
         try:
             socketTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            socketTCP.settimeout(20)
-            
-            # Utilisation des attributs de la classe (self.)
+            socketTCP.settimeout(10)
             socketTCP.connect((self.Routeur_IP_Passerelle, self.Port_Routeur_Passerelle))
             
             socketTCP.sendall(b"REQ_LIST_KEYS")
-            reponse = socketTCP.recv(65536).decode("utf-8")
+            reponse_raw = recevoir_tout(socketTCP)
+            reponse = reponse_raw.decode("utf-8").strip()
             socketTCP.close()
-            
+
         except Exception as e:
             journalisation_log("CLIENT", "ERREUR", f"Échec récupération annuaire : {e}")
             return {}
@@ -102,46 +102,41 @@ class Client:
         annuaire = {}
         if not reponse or "ERROR" in reponse: 
             return annuaire
-
-        lignes_routeurs = reponse.split('|')
+        lignes_routeurs = reponse.split('\n')
 
         for ligne in lignes_routeurs:
-            if not ligne.strip(): continue
+            ligne = ligne.strip()
+            if not ligne or "ID:" not in ligne:
+                continue
+            
             try:
-                if ';' in ligne:
-                    champs = ligne.split(';')
-                else:
-                    champs = ligne.split(',')
-
+                champs = ligne.split(';')
                 infos = {}
+                
                 for champ in champs:
                     if ':' in champ:
-                        parties = champ.split(':', 1)
-                        if len(parties) == 2:
-                            infos[parties[0]] = parties[1]
+                        cle_champ, valeur_champ = champ.split(':', 1)
+                        infos[cle_champ.strip()] = valeur_champ.strip()
                 
                 if 'ID' in infos and 'KEY' in infos:
                     id_r = infos['ID']
-                    cle_str = infos['KEY'].strip()
-
+                    cle_str = infos['KEY']
                     parts_cle = cle_str.split(',')
                     
                     if len(parts_cle) >= 2:
-                        e_val = parts_cle[0]
-                        n_val = parts_cle[1]
+                        e_val = int(parts_cle[0].strip())
+                        n_val = int(parts_cle[1].strip())
                         
                         annuaire[id_r] = {
-                            'ip': infos.get('IP', ''),
-                            'port': int(infos.get('PORT', self.Port_Routeur_Passerelle)),
-                            'cle': (int(e_val), int(n_val))
+                            'ip': infos.get('IP', '127.0.0.1'),
+                            'port': int(infos.get('PORT', 8080)),
+                            'cle': (e_val, n_val)
                         }
-                    else:
-                        print(f"Clé ignorée (format incorrect) : {cle_str}")
-
+            
             except Exception as e:
                 print(f"Erreur parsing ligne : {e}")
-                pass
-
+        
+        journalisation_log("CLIENT", "ANNUAIRE", f"{len(annuaire)} routeurs chargés avec succès.")
         return annuaire
     
     def construire_oignon(self, message, chemin_ids, annuaire_complet, id_dest_final):
