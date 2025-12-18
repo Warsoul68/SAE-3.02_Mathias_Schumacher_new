@@ -110,3 +110,6 @@ def main():
     except Exception as e:
         journalisation_log(nom_log, "FATAL", f"Erreur critique : {e}")
         print(f"\n[!] Erreur fatale : {e}")
+
+if __name__ == "__main__":
+    main()
