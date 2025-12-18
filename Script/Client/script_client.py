@@ -4,11 +4,13 @@ import threading
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QTextEdit, QGroupBox,
-    QSpinBox, QMessageBox, QStackedWidget, QFormLayout, QMainWindow
+    QSpinBox, QMessageBox, QStackedWidget, QFormLayout, QMainWindow,
+    QTabWidget
 )
 from PyQt5.QtCore import pyqtSignal, QObject, Qt
 
 try:
+    # Import de la classe client
     from Client import Client, definir_callback_client
 except ImportError:
     print("ERREUR CRITIQUE : Le fichier Client.py est introuvable dans le dossier !")
@@ -16,6 +18,7 @@ except ImportError:
 
 class LogBridge(QObject):
     nouveau_signal_log = pyqtSignal(str)
+
 
 class PageConfig(QWidget):
     config_validee = pyqtSignal(str, int, int)
@@ -27,41 +30,45 @@ class PageConfig(QWidget):
     def init_ui(self):
         mise_en_page = QVBoxLayout()
         mise_en_page.setAlignment(Qt.AlignCenter)
-        lbl_titre = QLabel("Client TOR - Configuration")
-        lbl_titre.setStyleSheet("font-size: 24px; font-weight: bold; color: #4CAF50; margin-bottom: 20px;")
-        lbl_titre.setAlignment(Qt.AlignCenter)
-        mise_en_page.addWidget(lbl_titre)
+        
+        lbl = QLabel("Connexion Réseau Oignon")
+        lbl.setStyleSheet("font-size: 24px; font-weight: bold; color: #4CAF50; margin-bottom: 20px;")
+        lbl.setAlignment(Qt.AlignCenter)
+        mise_en_page.addWidget(lbl)
 
-        formulaire_groupe = QGroupBox("Paramètres de connexion")
-        formulaire_mise_en_page = QFormLayout()
-        self.input_ip_routeur = QLineEdit("10.128.x.x") 
-        self.input_port_routeur = QLineEdit("8081")
-        self.input_port_client = QLineEdit("9000")
+        group = QGroupBox("Configuration Passerelle")
+        form = QFormLayout()
+        
+        self.input_ip = QLineEdit("192.168.1.X")
+        self.input_ip.setPlaceholderText("IP du Routeur Linux")
+        self.input_pr = QLineEdit("8081")
+        self.input_pc = QLineEdit("9000")
 
-        formulaire_mise_en_page.addRow("IP Passerelle (Routeur) :", self.input_ip_routeur)
-        formulaire_mise_en_page.addRow("Port Passerelle :", self.input_port_routeur)
-        formulaire_mise_en_page.addRow("Mon port d'écoute :", self.input_port_client)
+        form.addRow("IP Routeur (Passerelle) :", self.input_ip)
+        form.addRow("Port Routeur :", self.input_pr)
+        form.addRow("Mon Port Local :", self.input_pc)
 
-        formulaire_groupe.setLayout(formulaire_mise_en_page)
-        mise_en_page.addWidget(formulaire_groupe)
+        group.setLayout(form)
+        mise_en_page.addWidget(group)
 
-        self.btn_valider = QPushButton("Démarrer le client")
-        self.btn_valider.setStyleSheet("background-color: #2196F3; color: white; padding: 12px; font-weight: bold;")
-        self.btn_valider.clicked.connect(self.verifier_et_envoyer)
-        mise_en_page.addWidget(self.btn_valider)
+        btn = QPushButton("Se Connecter")
+        btn.setStyleSheet("background-color: #2196F3; color: white; padding: 12px; font-weight: bold;")
+        btn.clicked.connect(self.valider)
+        mise_en_page.addWidget(btn)
 
         self.setLayout(mise_en_page)
     
-    def verifier_et_envoyer(self):
-        ip = self.input_ip_routeur.text().strip()
+    def valider(self):
+        ip = self.input_ip.text().strip()
+        if not ip: return QMessageBox.warning(self, "Erreur", "IP requise.")
         try:
-            port_routeur = int(self.input_port_routeur.text().strip())
-            port_client = int(self.input_port_client.text().strip())
-            self.config_validee.emit(ip, port_routeur, port_client)
+            pr = int(self.input_pr.text())
+            pc = int(self.input_pc.text())
+            self.config_validee.emit(ip, pr, pc)
         except ValueError:
-            QMessageBox.warning(self, "Erreur", "Les ports doivent être des nombres.")
+            QMessageBox.warning(self, "Erreur", "Ports invalides.")
     
-# Fenétre de la messagerie
+    # Page messagerie
 class PageMessagerie(QWidget):
     signal_maj_annuaire = pyqtSignal(int)
 
@@ -69,120 +76,154 @@ class PageMessagerie(QWidget):
         super().__init__()
         self.client_backend = None
         self.pont = LogBridge()
-        self.pont.nouveau_signal_log.connect(self.mise_a_jour_zone_log)
-        self.signal_maj_annuaire.connect(self.mettre_a_jour_ui_annuaire)
-        
+        self.pont.nouveau_signal_log.connect(self.log_ui)
+        self.signal_maj_annuaire.connect(self.update_spinbox)
         self.init_ui()
-    
+
     def init_ui(self):
-        mise_en_page = QVBoxLayout()
-        self.lbl_info = QLabel("Statut : Deconnecté")
-        self.lbl_info.setStyleSheet("background-color: #333; color: white; padding: 5px; border-radius: 4px;")
-        mise_en_page.addWidget(self.lbl_info)
+        mise_en_page_principal = QVBoxLayout()
+        self.lbl_statut = QLabel("Statut : Déconnecté")
+        self.lbl_statut.setStyleSheet("background-color: #333; color: white; padding: 5px; font-weight: bold;")
+        mise_en_page_principal.addWidget(self.lbl_statut)
 
-        groupe_messagerie = QGroupBox("Messagerie Oignon")
-        mise_en_page_messagerie = QVBoxLayout()
+        groupe = QGroupBox("Envoi de Message")
+        mise_en_page_groupe = QVBoxLayout()
         
-        self.btn_annuaire = QPushButton("Récuperer l'annuaire")
+        self.btn_annuaire = QPushButton("🔄 Télécharger l'Annuaire")
         self.btn_annuaire.clicked.connect(self.get_annuaire)
-        mise_en_page_messagerie.addWidget(self.btn_annuaire)
+        mise_en_page_groupe.addWidget(self.btn_annuaire)
 
-        mise_en_page_envoyer = QHBoxLayout()
-        self.in_dest = QLineEdit()
-        self.in_dest.setPlaceholderText("ID Destinataire (ex: 2)")
+        self.tables = QTabWidget()
         
+        # Page 1 vers le client
+        self.table_client = QWidget()
+        l_client = QFormLayout()
+        self.in_c_ip = QLineEdit()
+        self.in_c_ip.setPlaceholderText("ex: 192.168.1.50")
+        self.in_c_port = QLineEdit("9000")
+        l_client.addRow("IP Destinataire :", self.in_c_ip)
+        l_client.addRow("Port Destinataire :", self.in_c_port)
+        self.table_client.setLayout(l_client)
+    
+    # Page 2 vers le routeur
+        self.table_routeur = QWidget()
+        l_routeur = QFormLayout()
+        self.in_r_id = QLineEdit()
+        self.in_r_id.setPlaceholderText("ID du Nœud (ex: 2)")
+        l_routeur.addRow("ID du Routeur :", self.in_r_id)
+        self.table_routeur.setLayout(l_routeur)
+
+        self.tables.addTab(self.table_client, "📤 Vers un Client (IP)")
+        self.tables.addTab(self.table_routeur, "🔒 Vers un Nœud (ID)")
+
+        mise_en_page_groupe.addWidget(self.tables)
+
+        # Options communes (Sauts + Message)
+        l_common = QHBoxLayout()
         self.spin_sauts = QSpinBox()
         self.spin_sauts.setRange(1, 1)
-        self.spin_sauts.setPrefix("Sauts: ")
-        
-        mise_en_page_envoyer.addWidget(QLabel("Pour :"))
-        mise_en_page_envoyer.addWidget(self.in_dest)
-        mise_en_page_envoyer.addWidget(self.spin_sauts)
-        mise_en_page_messagerie.addLayout(mise_en_page_envoyer)
+        self.spin_sauts.setPrefix("Relais: ")
+        l_common.addWidget(QLabel("Complexité :"))
+        l_common.addWidget(self.spin_sauts)
+        mise_en_page_groupe.addLayout(l_common)
 
-        mise_en_page_message = QHBoxLayout()
-        self.in_message = QLineEdit()
-        self.in_message.setPlaceholderText("Message")
-        self.btn_envoyer = QPushButton("Envoyer")
-        self.btn_envoyer.clicked.connect(self.envoyer_oignon)
-        self.btn_envoyer.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
-        
-        mise_en_page_message.addWidget(self.in_message)
-        mise_en_page_message.addWidget(self.btn_envoyer)
-        mise_en_page_messagerie.addLayout(mise_en_page_message)
+        l_msg = QHBoxLayout()
+        self.in_msg = QLineEdit()
+        self.in_msg.setPlaceholderText("Votre message secret...")
+        self.btn_send = QPushButton("Envoyer")
+        self.btn_send.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
+        self.btn_send.clicked.connect(self.envoyer)
+        l_msg.addWidget(self.in_msg)
+        l_msg.addWidget(self.btn_send)
+        mise_en_page_groupe.addLayout(l_msg)
 
-        groupe_messagerie.setLayout(mise_en_page_messagerie)
-        mise_en_page.addWidget(groupe_messagerie)
-        
+        groupe.setLayout(mise_en_page_groupe)
+        mise_en_page_principal.addWidget(groupe)
+
+        # Logs
         self.console = QTextEdit()
         self.console.setReadOnly(True)
-        self.console.setStyleSheet("background-color: black; color: #00FF00; font-family: Consolas; font-size: 11px;")
-        mise_en_page.addWidget(self.console)
-        
-        self.setLayout(mise_en_page)
-    
-    def demarrer_backend(self, ip, port_routeur, port_client):
-        self.lbl_info.setText(f"Connecté - Passerelle: {ip}:{port_routeur}")
-        self.client_backend = Client(ip, port_routeur, port_client)
-        definir_callback_client(self.pont.nouveau_signal_log.emit)
-        self.get_annuaire()
-    
-    def mise_a_jour_zone_log(self, texte):
-        self.console.append(texte)
-        self.console.verticalScrollBar().setValue(self.console.verticalScrollBar().maximum())
-    
-    def get_annuaire(self):
-        if not self.client_backend: return
-        threading.Thread(target=self._thread_annuaire).start()
-        
-    def _thread_annuaire(self):
-        res = self.client_backend.recuperer_annuaire_complet()
-        if res:
-            nb_routeurs = len(res)
-            self.signal_maj_annuaire.emit(nb_routeurs)
-    
-    def mettre_a_jour_ui_annuaire(self, nb_routeurs):
-        self.spin_sauts.setMaximum(max(1, nb_routeurs))
-        self.spin_sauts.setValue(min(3, nb_routeurs))
-        self.mise_a_jour_zone_log(f"UI Mise à jour : {nb_routeurs} routeurs disponibles.")
+        self.console.setStyleSheet("background-color: #111; color: #0f0; font-family: Consolas; font-size: 11px;")
+        mise_en_page_principal.addWidget(self.console)
 
-    def envoyer_oignon(self):
+        self.setLayout(mise_en_page_principal)
+    
+    def demarrer(self, ip, pr, pc):
+        self.lbl_statut.setText(f"Connecté à {ip}:{pr}")
+        try:
+            self.client_backend = Client(ip, pr, pc)
+            definir_callback_client(self.pont.nouveau_signal_log.emit)
+            self.get_annuaire()
+        except Exception as e:
+            self.log_ui(f"[ERREUR] {e}")
+
+    def log_ui(self, txt):
+        self.console.append(txt)
+        self.console.verticalScrollBar().setValue(self.console.verticalScrollBar().maximum())
+
+    def get_annuaire(self):
+        if self.client_backend: threading.Thread(target=self._th_annuaire).start()
+
+    def _th_annuaire(self):
+        res = self.client_backend.recuperer_annuaire_complet()
+        if res: self.signal_maj_annuaire.emit(len(res))
+
+    def update_spinbox(self, n):
+        self.spin_sauts.setMaximum(max(1, n))
+        self.spin_sauts.setValue(min(3, n))
+        self.log_ui(f"Annuaire chargé : {n} nœuds.")
+    
+    def envoyer(self):
         if not self.client_backend: return
-        
-        dest_id = self.in_dest.text().strip()
-        message = self.in_message.text()
+        message = self.in_msg.text()
         sauts = self.spin_sauts.value()
         
-        if dest_id and message:
-            threading.Thread(target=self.client_backend.envoyer_message_auto, 
-                             args=(dest_id, message, sauts)).start()
-            self.in_message.clear()
-        else:
-            QMessageBox.warning(self, "Erreur", "Remplissez l'ID destinataire et le message.")
+        if not message: return QMessageBox.warning(self, "Erreur", "Message vide.")
+
+        # On regarde quel onglet est actif
+        index = self.tables.currentIndex()
+        
+        if index == 0: # Onglet CLIENT (IP)
+            ip = self.in_c_ip.text().strip()
+            try: port = int(self.in_c_port.text())
+            except: return QMessageBox.warning(self, "Erreur", "Port invalide.")
+            
+            if not ip: return QMessageBox.warning(self, "Erreur", "IP requise.")
+            
+            threading.Thread(target=self.client_backend.envoyer_message,
+                             args=((ip, port), message, sauts, "CLIENT")).start()
+            
+        elif index == 1: 
+            rid = self.in_r_id.text().strip()
+            if not rid: return QMessageBox.warning(self, "Erreur", "ID requis.")
+            
+            threading.Thread(target=self.client_backend.envoyer_message,
+                             args=(rid, message, sauts, "ROUTEUR")).start()
+
+        self.in_msg.clear()
     
 # Fenétre principale
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Client Oignon")
-        self.resize(800, 600)
-        
+        self.setWindowTitle("Client Oignon (Hybride)")
+        self.resize(600, 700)
         self.stack = QStackedWidget()
-        self.page_config = PageConfig()
-        self.page_messagerie = PageMessagerie()
-        
-        self.stack.addWidget(self.page_config)
-        self.stack.addWidget(self.page_messagerie)
-        self.page_config.config_validee.connect(self.passer_a_messagerie)
+        self.p1 = PageConfig()
+        self.p2 = PageMessagerie()
+        self.stack.addWidget(self.p1)
+        self.stack.addWidget(self.p2)
+        self.p1.config_validee.connect(self.lancer_chat)
         self.setCentralWidget(self.stack)
-    
-    def passer_a_messagerie(self, ip, port_routeur, port_client):
-        self.page_messagerie.demarrer_backend(ip, port_routeur, port_client)
+
+    def lancer_chat(self, ip, pr, pc):
+        self.p2.demarrer(ip, pr, pc)
         self.stack.setCurrentIndex(1)
-    
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-    fenetre = MainWindow()
-    fenetre.show()
+    w = MainWindow()
+    w.show()
     sys.exit(app.exec_())
+    
