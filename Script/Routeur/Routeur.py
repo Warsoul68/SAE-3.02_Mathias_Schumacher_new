@@ -192,28 +192,33 @@ class Routeur:
         try:
             e, n = self.crypto.publique
             
-            mon_ip_publique = "127.0.0.1"
-            s_detect = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            # --- MÉTHODE FIABLE POUR TROUVER L'IP BRIDGE ---
+            # On crée un socket temporaire pour "voir" par où on sort
+            s_test = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             try:
-                s_detect.connect(("8.8.8.8", 80))
-                mon_ip_publique = s_detect.getsockname()[0]
-                s_detect.close()
+                # On ne se connecte pas vraiment, on demande juste l'IP de sortie
+                s_test.connect(("8.8.8.8", 80))
+                mon_ip_publique = s_test.getsockname()[0]
+                s_test.close()
             except Exception:
-                mon_ip_publique = socket.gethostbyname(socket.gethostname())
+                mon_ip_publique = "127.0.0.1"
+
             if mon_ip_publique.startswith("127.") or mon_ip_publique.startswith("10.0."):
-                print(f"[!] Attention : IP détectée ({mon_ip_publique}) incorrecte pour le mode hybride.")
+                print(f"\n[!] Attention : IP détectée ({mon_ip_publique}) invalide pour le PC physique.")
                 mon_ip_publique = input("Entrez manuellement l'IP BRIDGE de cette VM (ex: 192.168.1.XX) : ")
-                
+
+            # Envoi au Master
             requete = f"INSCRIPTION|{mon_ip_publique}|{self.port_local}|{e},{n}"
             self._envoyer_socket(self.ip_master, self.port_master, requete)
             
-            journalisation_log(self.nom_log, "MASTER", f"Inscription envoyée avec l'IP : {mon_ip_publique}")
+            journalisation_log(self.nom_log, "MASTER", f"Inscrit avec l'IP : {mon_ip_publique}")
             
             time.sleep(0.5)
             self.client_recuperer_annuaire()
-            
         except Exception as e:
             journalisation_log(self.nom_log, "ERREUR", f"Inscription : {e}")
+
+
     def client_recuperer_annuaire(self):
         try:
             socketTCPannuaire = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
