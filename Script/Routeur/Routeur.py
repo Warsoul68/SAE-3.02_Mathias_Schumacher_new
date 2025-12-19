@@ -193,27 +193,27 @@ class Routeur:
             e, n = self.crypto.publique
             
             mon_ip_publique = "127.0.0.1"
+            s_detect = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             try:
-                interfaces = socket.getaddrinfo(socket.gethostname(), None)
-                ips = [i[4][0] for i in interfaces if ":" not in i[4][0]]
-                for ip in ips:
-                    if not ip.startswith("127.") and not ip.startswith("10.0."):
-                        mon_ip_publique = ip
-                        break
-            except:
-                pass
+                s_detect.connect(("8.8.8.8", 80))
+                mon_ip_publique = s_detect.getsockname()[0]
+                s_detect.close()
+            except Exception:
+                mon_ip_publique = socket.gethostbyname(socket.gethostname())
+            if mon_ip_publique.startswith("127.") or mon_ip_publique.startswith("10.0."):
+                print(f"[!] Attention : IP détectée ({mon_ip_publique}) incorrecte pour le mode hybride.")
+                mon_ip_publique = input("Entrez manuellement l'IP BRIDGE de cette VM (ex: 192.168.1.XX) : ")
+                
             requete = f"INSCRIPTION|{mon_ip_publique}|{self.port_local}|{e},{n}"
-            
-            # Envoi au Master
             self._envoyer_socket(self.ip_master, self.port_master, requete)
-            journalisation_log(self.nom_log, "MASTER", f"Inscrit avec l'IP publique : {mon_ip_publique}")
+            
+            journalisation_log(self.nom_log, "MASTER", f"Inscription envoyée avec l'IP : {mon_ip_publique}")
             
             time.sleep(0.5)
             self.client_recuperer_annuaire()
             
         except Exception as e:
             journalisation_log(self.nom_log, "ERREUR", f"Inscription : {e}")
-
     def client_recuperer_annuaire(self):
         try:
             socketTCPannuaire = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
