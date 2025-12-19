@@ -57,9 +57,9 @@ def main():
                         print(f" - ID {rid} : {info['ip']}:{info['port']}")
 
             elif choix == "3":
-                print("Actualisation de l'annuaire...")
+                print("\nPréparation de l'envoie")
                 mon_routeur.client_recuperer_annuaire()
-                print("Rappel : Pour les échange de message entre Routeurs, utilisez l'IP intnet (Ex: 10.0.x.x)")
+                print("Rappel : Pour les échanges entre Routeurs, utilisez l'IP intnet (Ex: 10.0.x.x)")
                 
                 if not mon_routeur.annuaire:
                     print("[!] Erreur : Annuaire vide.")
@@ -67,30 +67,44 @@ def main():
                 
                 try:
                     target_port = int(input("Port de la cible : "))
+                    
                     if target_port == port_local:
                         print(f"\n[!] ERREUR : Le port {target_port} est votre propre port.")
                         print("Impossible de s'envoyer un message à soi-même.")
                         continue
                         
                     target_ip = input("IP de la cible : ")
-                    msg = input("Message : ")
-                    nb_sauts = int(input("Nombre de sauts : ") or 1)
+                    msg = input("Message à envoyer : ")
+                    nb_sauts = int(input("Nombre de relais (sauts) : ") or 1)
+                    
+                    ids_dispos = list(mon_routeur.annuaire.keys())
+                    id_exit = random.choice(ids_dispos)
+                    relais_possibles = [i for i in ids_dispos if i != id_exit]
+                    
+                    chemin = random.sample(relais_possibles, min(nb_sauts-1, len(relais_possibles))) + [id_exit]
+                    
+                    journalisation_log(nom_log, "ENVOI", f"Préparation oignon vers {target_ip}:{target_port} via {chemin}")
+                    
+                    paquet = mon_routeur.construire_oignon(
+                        message=msg, 
+                        chemin_ids=chemin, 
+                        annuaire=mon_routeur.annuaire, 
+                        mode="CLIENT", 
+                        ip_c=target_ip, 
+                        port_c=target_port
+                    )
+                    
+                    premier_id = chemin[0]
+                    target_relais = mon_routeur.annuaire[premier_id]
+                    mon_routeur._envoyer_socket(target_relais['ip'], target_relais['port'], paquet)
+                    
+                    print(f"\n[OK] Message envoyé anonymement via le circuit : {chemin}")
                     
                 except ValueError:
-                    print("[!] Saisie invalide.")
-                msg = input("Message à envoyer : ")
-                try:
-                    nb_sauts = int(input("Nombre de relais (sauts) : ") or 1)
-                except ValueError:
-                    nb_sauts = 1
-                
-                ids_dispos = list(mon_routeur.annuaire.keys())
-                
-                id_exit = random.choice(ids_dispos)
-                
-                relais_possibles = [i for i in ids_dispos if i != id_exit]
-                
-                chemin = random.sample(relais_possibles, min(nb_sauts-1, len(relais_possibles))) + [id_exit]
+                    print("[!] Saisie invalide (le port et les sauts doivent être des nombres).")
+                except Exception as e:
+                    print(f"[!] Erreur lors de l'envoi : {e}")
+                    journalisation_log(nom_log, "ERREUR", f"Échec envoi : {e}")
                 
                 try:
                     journalisation_log(nom_log, "ENVOI", f"Préparation oignon vers {target_ip}:{target_port} via {chemin}")
