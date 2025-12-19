@@ -15,9 +15,10 @@ except ImportError:
     sys.exit()
 
 class LogBridge(QObject):
+    """Pont pour transmettre les logs du thread vers l'interface graphique"""
     nouveau_signal_log = pyqtSignal(str)
 
-# page de configuration
+# Page de configuration
 class PageConfig(QWidget):
     config_validee = pyqtSignal(str, int, int)
 
@@ -39,7 +40,7 @@ class PageConfig(QWidget):
         
         self.input_ip = QLineEdit("192.168.1.X")
         self.input_ip.setPlaceholderText("IP du Routeur/Relais Linux")
-        self.input_pr = QLineEdit("8081")
+        self.input_pr = QLineEdit("8080")
         self.input_pc = QLineEdit("9000")
 
         formulaire.addRow("IP Passerelle :", self.input_ip)
@@ -48,6 +49,7 @@ class PageConfig(QWidget):
 
         groupe.setLayout(formulaire)
         mise_en_page.addWidget(groupe)
+
         btn = QPushButton("Démarrer le Client")
         btn.setStyleSheet("background-color: #2196F3; color: white; padding: 12px; font-weight: bold; border-radius: 5px;")
         btn.clicked.connect(self.valider)
@@ -64,8 +66,8 @@ class PageConfig(QWidget):
             self.config_validee.emit(ip, pr, pc)
         except ValueError:
             QMessageBox.warning(self, "Erreur", "Ports invalides.")
-
-# Page de messagerie
+    
+# Page de Messagerie
 class PageMessagerie(QWidget):
     signal_maj_annuaire = pyqtSignal(int)
 
@@ -104,13 +106,13 @@ class PageMessagerie(QWidget):
         self.spin_sauts.setRange(1, 1)
         self.spin_sauts.setPrefix("Circuit : ")
         self.spin_sauts.setSuffix(" rebonds")
-        l_common.addWidget(QLabel("Nombre de sauts :"))
+        l_common.addWidget(QLabel("Complexité du trajet :"))
         l_common.addWidget(self.spin_sauts)
         mise_en_page_groupe.addLayout(l_common)
 
         l_msg = QHBoxLayout()
         self.in_msg = QLineEdit()
-        self.in_msg.setPlaceholderText("Message...")
+        self.in_msg.setPlaceholderText("Écrivez votre message secret...")
         self.btn_send = QPushButton("ENVOYER")
         self.btn_send.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 8px;")
         self.btn_send.clicked.connect(self.envoyer)
@@ -120,31 +122,33 @@ class PageMessagerie(QWidget):
 
         groupe.setLayout(mise_en_page_groupe)
         mise_en_page_principal.addWidget(groupe)
+
         self.console = QTextEdit()
         self.console.setReadOnly(True)
         self.console.setStyleSheet("background-color: #000; color: #FFF; font-family: Consolas; font-size: 11px;")
         mise_en_page_principal.addWidget(self.console)
 
         self.setLayout(mise_en_page_principal)
-    
+
     def demarrer(self, ip, pr, pc):
         self.lbl_statut.setText(f"Connecté - Passerelle: {ip}:{pr}")
         try:
             self.client_backend = Client(ip, pr, pc)
             definir_callback_client(self.pont.nouveau_signal_log.emit)
+            # Récupération immédiate de l'annuaire
             self.get_annuaire()
         except Exception as e:
             self.log_ui(f"[ERREUR] Impossible de lancer le backend : {e}")
 
     def log_ui(self, txt):
-        """Affiche les logs en texte brut dans la console GUI"""
         self.console.append(txt)
+        # Scroll automatique vers le bas
         self.console.verticalScrollBar().setValue(self.console.verticalScrollBar().maximum())
 
     def get_annuaire(self):
         if self.client_backend: 
             threading.Thread(target=self._th_annuaire).start()
-
+    
     def _th_annuaire(self):
         res = self.client_backend.recuperer_annuaire_complet()
         if res: 
@@ -153,14 +157,14 @@ class PageMessagerie(QWidget):
     def update_spinbox(self, n):
         self.spin_sauts.setMaximum(max(1, n))
         self.spin_sauts.setValue(min(2, n))
-        self.log_ui(f"--> Annuaire chargé : {n} nœuds disponibles.")
+        self.log_ui(f"Annuaire chargé : {n} nœuds disponibles.")
     
     def envoyer(self):
         if not self.client_backend: return
         message = self.in_msg.text()
         sauts = self.spin_sauts.value()
         
-        if not message: return
+        if not message: return QMessageBox.warning(self, "Erreur", "Message vide.")
         
         ip = self.in_dest_ip.text().strip()
         try: 
@@ -168,18 +172,18 @@ class PageMessagerie(QWidget):
         except ValueError: 
             return QMessageBox.warning(self, "Erreur", "Port invalide.")
         
-        if not ip: return
+        if not ip: return QMessageBox.warning(self, "Erreur", "L'IP est requise.")
 
         threading.Thread(target=self.client_backend.envoyer_message,
                          args=((ip, port), message, sauts)).start()
         
         self.in_msg.clear()
-
-# Page principale
+    
+# Page principal
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Message oignon")
+        self.setWindowTitle("Oignon Messenger P2P")
         self.resize(700, 600)
         
         self.stack = QStackedWidget()

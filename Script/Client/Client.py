@@ -20,11 +20,19 @@ def definir_callback_client(fonction):
 def journalisation_log(qui, type_message, message):
     maintenant = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     ligne_log = f"[{maintenant}] [{qui}] [{type_message}] {message}"
+    
     print(ligne_log)
+    
     if CALLBACK_LOG_CLIENT:
         try: CALLBACK_LOG_CLIENT(ligne_log)
         except: pass
 
+    try:
+        with open("journal_client.log", "a", encoding="utf-8") as f:
+            f.write(ligne_log + "\n")
+    except: pass
+
+ # Classe Client 
 class Client:
     def __init__(self, routeur_ip, routeur_port, port_ecoute_local):
         self.Routeur_IP = routeur_ip
@@ -32,11 +40,11 @@ class Client:
         self.Port_en_ecoute = port_ecoute_local
         self.crypto_outils = CryptoManager()
         self.annuaire_cache = {}
+        
         self._lancer_ecoute_reception()
-        journalisation_log("CLIENT", "INIT", f"Prêt sur le port {self.Port_en_ecoute}. Passerelle : {self.Routeur_IP}:{self.Routeur_Port}")
+        journalisation_log("CLIENT", "INIT", f"Connecté à la Passerelle {self.Routeur_IP}:{self.Routeur_Port}")
 
     def _lancer_ecoute_reception(self):
-        """Lance un thread qui attend les messages venant du réseau oignon"""
         t = threading.Thread(target=self._ecouter_message_entrants, daemon=True)
         t.start()
 
@@ -60,17 +68,17 @@ class Client:
     
     def recuperer_annuaire_complet(self):
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(5)
-            s.connect((self.Routeur_IP, self.Routeur_Port))
-            s.sendall(b"REQ_LIST_KEYS")
+            socketTCPannuaire = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            socketTCPannuaire.settimeout(5)
+            socketTCPannuaire.connect((self.Routeur_IP, self.Routeur_Port))
+            socketTCPannuaire.sendall(b"REQ_LIST_KEYS")
             
             reponse = b""
             while True:
-                partie = s.recv(4096)
+                partie = socketTCPannuaire.recv(4096)
                 if not partie: break
                 reponse += partie
-            s.close()
+            socketTCPannuaire.close()
             
             annuaire = {}
             for ligne in reponse.decode("utf-8").split('\n'):
@@ -93,11 +101,7 @@ class Client:
     def construire_oignon(self, message, chemin_ids, annuaire, mode="CLIENT", ip_c=None, port_c=None):
         id_sortie = chemin_ids[-1]
         cle_sortie = annuaire[id_sortie]['cle']
-        
-        if mode == "CLIENT":
-            header = f"RELAY:CLIENT:IP:{ip_c};PORT:{port_c}"
-        else:
-            header = "DEST:FINAL"
+        header = f"RELAY:CLIENT:IP:{ip_c};PORT:{port_c}"
             
         payload = f"{header}|{message}"
         paquet_chiffre = self.crypto_outils.chiffrer(payload, cle_sortie)
@@ -114,13 +118,14 @@ class Client:
         return paquet_chiffre
     
     def envoyer_message(self, cible, message, nb_sauts):
-        if not self.annuaire_cache: 
-            self.recuperer_annuaire_complet()
+        self.recuperer_annuaire_complet()
             
         ids = list(self.annuaire_cache.keys())
         
         if len(ids) < nb_sauts: 
-            return "Erreur: Pas assez de routeurs disponibles pour le nombre de sauts demandé."
+            journalisation_log("CLIENT", "ERREUR", "Pas assez de routeurs disponibles.")
+            return "Erreur"
+            
         dest_id = random.choice(ids)
         
         relais_possibles = [i for i in ids if i != dest_id]
@@ -129,15 +134,16 @@ class Client:
         try:
             journalisation_log("CLIENT", "OIGNON", f"Création circuit anonyme : {chemin}")
             ip_dest, port_dest = cible 
+            
             paquet = self.construire_oignon(message, chemin, self.annuaire_cache, "CLIENT", ip_dest, port_dest)
             id_entree = chemin[0]
             ip_entree = self.annuaire_cache[id_entree]['ip']
             port_entree = self.annuaire_cache[id_entree]['port']
             
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((ip_entree, port_entree))
-            s.sendall(paquet.encode('utf-8'))
-            s.close()
+            socketTCPlog = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            socketTCPlog.connect((ip_entree, port_entree))
+            socketTCPlog.sendall(paquet.encode('utf-8'))
+            socketTCPlog.close()
             
             journalisation_log("CLIENT", "ENVOI", f"Paquet expédié vers l'entrée {id_entree}")
             return "Succès"
@@ -145,5 +151,3 @@ class Client:
         except Exception as e:
             journalisation_log("CLIENT", "ERREUR", f"Échec de l'envoi : {e}")
             return f"Erreur : {e}"
-    
-    
