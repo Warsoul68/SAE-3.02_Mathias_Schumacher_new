@@ -36,28 +36,27 @@ class PageConfig(QWidget):
         mise_en_page.addWidget(lbl)
 
         groupe = QGroupBox("Paramètres de la Passerelle")
+        
         formulaire = QFormLayout()
         
         self.input_ip = QLineEdit("192.168.1.X")
         self.input_ip.setPlaceholderText("Ex: 10.0.x.x (VM) ou 192.168.x.x (PC)")
-        self.input_pr = QLineEdit("8080")
-        self.input_pc = QLineEdit("9000")
-
-        lbl_aide = QLabel("<b>Aide :</b> Si votre Windows est en réseau 'intnet', ""utilisez l'IP interne du routeur.")
-        lbl_aide.setWordWrap(True)
-        lbl_aide.setStyleSheet("color: #555; font-size: 10px; margin-top: 5px;")
+        self.input_pr = QLineEdit("8080") 
+        self.input_pc = QLineEdit("8888") 
 
         formulaire.addRow("IP Passerelle :", self.input_ip)
         formulaire.addRow("Port Passerelle :", self.input_pr)
         formulaire.addRow("Mon Port Local :", self.input_pc)
 
-        groupe.setLayout(formulaire)
-        mise_en_page.addWidget(groupe)
+        lbl_aide = QLabel("<b>Aide :</b> Si votre Windows est en réseau 'intnet', utilisez l'IP interne du routeur (10.0.x.x).")
+        lbl_aide.setWordWrap(True)
+        lbl_aide.setStyleSheet("color: #555; font-size: 11px; margin-top: 10px; font-style: italic;")
 
         aide_groupe = QVBoxLayout()
         aide_groupe.addLayout(formulaire)
         aide_groupe.addWidget(lbl_aide)
         groupe.setLayout(aide_groupe)
+        mise_en_page.addWidget(groupe)
 
         btn = QPushButton("Démarrer le Client")
         btn.setStyleSheet("background-color: #2196F3; color: white; padding: 12px; font-weight: bold; border-radius: 5px;")
@@ -104,7 +103,7 @@ class PageMessagerie(QWidget):
 
         formulaire_dest = QFormLayout()
         self.in_dest_ip = QLineEdit()
-        self.in_dest_ip.setPlaceholderText("IP de la cible (Ex: 10.0.x.x (VM ou routeur) ou 192.168.x.x (PC))")
+        self.in_dest_ip.setPlaceholderText("IP cible (Ex: 10.0.0.x ou 192.168.1.x)")
         self.in_dest_port = QLineEdit("9000")
         formulaire_dest.addRow("IP Destinataire :", self.in_dest_ip)
         formulaire_dest.addRow("Port Destinataire :", self.in_dest_port)
@@ -112,7 +111,7 @@ class PageMessagerie(QWidget):
 
         l_common = QHBoxLayout()
         self.spin_sauts = QSpinBox()
-        self.spin_sauts.setRange(1, 1)
+        self.spin_sauts.setRange(1, 1) # Mettre (1, 3) si tu as assez de routeurs
         self.spin_sauts.setPrefix("Circuit : ")
         self.spin_sauts.setSuffix(" rebonds")
         l_common.addWidget(QLabel("Complexité du trajet :"))
@@ -144,14 +143,12 @@ class PageMessagerie(QWidget):
         try:
             self.client_backend = Client(ip, pr, pc)
             definir_callback_client(self.pont.nouveau_signal_log.emit)
-            # Récupération immédiate de l'annuaire
             self.get_annuaire()
         except Exception as e:
             self.log_ui(f"[ERREUR] Impossible de lancer le backend : {e}")
 
     def log_ui(self, txt):
         self.console.append(txt)
-        # Scroll automatique vers le bas
         self.console.verticalScrollBar().setValue(self.console.verticalScrollBar().maximum())
 
     def get_annuaire(self):
@@ -192,7 +189,7 @@ class PageMessagerie(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Oignon Messenger P2P")
+        self.setWindowTitle("Messagerie Oignon")
         self.resize(700, 600)
         
         self.stack = QStackedWidget()
