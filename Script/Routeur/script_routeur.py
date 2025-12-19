@@ -59,7 +59,7 @@ def main():
             elif choix == "3":
                 print("Actualisation de l'annuaire...")
                 mon_routeur.client_recuperer_annuaire()
-                print("Rappel : Pour les Routeurs, utilisez l'IP intnet (Ex: 10.0.x.x)")
+                print("Rappel : Pour les échange de message entre Routeurs, utilisez l'IP intnet (Ex: 10.0.x.x)")
                 
                 if not mon_routeur.annuaire:
                     print("[!] Erreur : Annuaire vide.")
