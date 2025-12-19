@@ -82,18 +82,21 @@ class Routeur:
     
     def _recevoir_tout(self, sock):
         contenu = b""
-        sock.settimeout(2)
+        sock.settimeout(0.5) 
         try:
             while True:
-                partie = sock.recv(4096)
+                partie = sock.recv(8192) 
                 if not partie: break
                 contenu += partie
-        except: pass
+                if len(partie) < 8192:
+                    break
+        except socket.timeout:
+            pass
         return contenu
 
     def _analyser_paquet(self, donnees_chiffrees):
         try:
-            message_str = donnees_chiffrees.decode('utf-8')
+            message_str = donnees_chiffrees.decode('utf-8', errors='ignore').strip()
 
             message_clair = self.crypto.dechiffrer(message_str)
 
@@ -104,6 +107,7 @@ class Routeur:
             if "|" not in message_clair: return
 
             commande, reste_du_paquet = message_clair.split("|", 1)
+            journalisation_log(self.nom_log, "CRYPTO", "Couche d'oignon retirée avec succès.")
             
             # Routage vers un autre noeud
             if "NEXT_IP" in commande:
