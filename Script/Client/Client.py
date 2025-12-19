@@ -101,7 +101,11 @@ class Client:
     def construire_oignon(self, message, chemin_ids, annuaire, mode="CLIENT", ip_c=None, port_c=None):
         id_sortie = chemin_ids[-1]
         cle_sortie = annuaire[id_sortie]['cle']
-        header = f"RELAY:CLIENT:IP:{ip_c};PORT:{port_c}"
+        
+        if mode == "CLIENT":
+            header = f"RELAY:CLIENT;IP:{ip_c};PORT:{port_c}"
+        else:
+            header = "DEST:FINAL"
             
         payload = f"{header}|{message}"
         paquet_chiffre = self.crypto_outils.chiffrer(payload, cle_sortie)
