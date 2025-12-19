@@ -134,48 +134,67 @@ class Client:
     
     def envoyer_message(self, cible, message, nb_sauts):
         self.recuperer_annuaire_complet()
-            
+        ip_dest, port_dest = cible 
         ids = list(self.annuaire_cache.keys())
         
-        if len(ids) < nb_sauts: 
-            nb_sauts = len(ids)
-            journalisation_log("CLIENT", "INFO", f"Adaptation à {nb_sauts} sauts (max dispo).")
-            
-        if nb_sauts == 0:
-             journalisation_log("CLIENT", "ERREUR", "Aucun routeur disponible.")
-             return "Erreur: Annuaire vide"
+        if not ids:
+            journalisation_log("CLIENT", "ERREUR", "Annuaire vide. Envoi impossible.")
+            return "Erreur"
 
-        dest_id = random.choice(ids)
-        relais_possibles = [i for i in ids if i != dest_id]
-        chemin = random.sample(relais_possibles, min(nb_sauts-1, len(relais_possibles))) + [dest_id]
+        id_cible_dans_annuaire = None
+        for rid, info in self.annuaire_cache.items():
+            if str(info['port']) == str(port_dest):
+                id_cible_dans_annuaire = rid
+                break
+
+        relais_pour_entree = [i for i in ids if i != id_cible_dans_annuaire]
         
+        if not relais_pour_entree:
+            id_entree = id_cible_dans_annuaire
+            journalisation_log("CLIENT", "ALERTE", "Un seul nœud dispo : l'entrée sera la cible.")
+        else:
+            id_entree = random.choice(relais_pour_entree)
+
+        autres_noeuds_dispos = [i for i in ids if i != id_entree]
+        nb_relais_supp = min(nb_sauts - 1, len(autres_noeuds_dispos))
+        chemin = [id_entree]
+        if nb_relais_supp > 0:
+            chemin += random.sample(autres_noeuds_dispos, nb_relais_supp)
+
         try:
-            journalisation_log("CLIENT", "OIGNON", f"Création circuit anonyme : {chemin}")
-            ip_dest, port_dest = cible 
+            journalisation_log("CLIENT", "OIGNON", f"Circuit créé : {chemin} (Cible: {ip_dest}:{port_dest})")
             
-            paquet = self.construire_oignon(message, chemin, self.annuaire_cache, "CLIENT", ip_dest, port_dest)
+            paquet = self.construire_oignon(
+                message=message, 
+                chemin_ids=chemin, 
+                annuaire=self.annuaire_cache, 
+                mode="CLIENT", 
+                ip_c=ip_dest, 
+                port_c=port_dest
+            )
             
-            id_entree = chemin[0]
             info_entree = self.annuaire_cache[id_entree]
-            
-            if info_entree['port'] == self.Routeur_Port:
-                ip_connexion = self.Routeur_IP
-                journalisation_log("CLIENT", "ROUTAGE", "Utilisation de l'interface locale (Intnet) pour l'entrée.")
+            if str(info_entree['port']) == str(self.Routeur_Port):
+                ip_connexion = self.Routeur_IP # On utilise l'IP locale (10.x.x.x)
+                interface_type = "LOCALE (Intnet)"
             else:
-                ip_connexion = info_entree['ip']
-                journalisation_log("CLIENT", "ROUTAGE", f"Utilisation de l'interface publique (Bridge) pour l'entrée via {ip_connexion}")
+                ip_connexion = info_entree['ip'] # On utilise l'IP de l'annuaire (Bridge)
+                interface_type = "PUBLIQUE (Bridge)"
 
             port_connexion = info_entree['port']
+            journalisation_log("CLIENT", "ROUTAGE", f"Connexion via {interface_type} vers {ip_connexion}:{port_connexion}")
+            
             socket_envoi = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            socket_envoi.settimeout(5.0)
+            socket_envoi.settimeout(5.0) 
             socket_envoi.connect((ip_connexion, port_connexion))
             socket_envoi.sendall(paquet.encode('utf-8'))
-            time.sleep(0.1) 
+            
+            time.sleep(0.15) 
             socket_envoi.close()
             
-            journalisation_log("CLIENT", "ENVOI", f"Paquet expédié vers l'entrée {id_entree} à l'adresse {ip_connexion}")
+            journalisation_log("CLIENT", "SUCCÈS", f"Paquet livré au premier saut : {id_entree}")
             return "Succès"
 
         except Exception as e:
-            journalisation_log("CLIENT", "ERREUR", f"Échec de l'envoi : {e}")
+            journalisation_log("CLIENT", "ERREUR", f"Échec de l'expédition : {e}")
             return f"Erreur : {e}"
