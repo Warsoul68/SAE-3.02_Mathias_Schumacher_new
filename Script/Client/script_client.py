@@ -15,7 +15,6 @@ except ImportError:
     sys.exit()
 
 class LogBridge(QObject):
-    """Pont pour transmettre les logs du thread vers l'interface graphique"""
     nouveau_signal_log = pyqtSignal(str)
 
 # Page de configuration
@@ -44,11 +43,11 @@ class PageConfig(QWidget):
         self.input_pr = QLineEdit("8080") 
         self.input_pc = QLineEdit("8888") 
 
-        formulaire.addRow("IP Passerelle :", self.input_ip)
+        formulaire.addRow("IP Passerelle (Routeur 1) :", self.input_ip)
         formulaire.addRow("Port Passerelle :", self.input_pr)
         formulaire.addRow("Mon Port Local :", self.input_pc)
 
-        lbl_aide = QLabel("<b>Aide :</b> Si votre Windows est en réseau 'intnet', utilisez l'IP interne du routeur (10.0.x.x).")
+        lbl_aide = QLabel("<b>Conseil :</b> Pour le test final, pointez vers l'IP Bridge de votre premier routeur VM.")
         lbl_aide.setWordWrap(True)
         lbl_aide.setStyleSheet("color: #555; font-size: 11px; margin-top: 10px; font-style: italic;")
 
@@ -111,7 +110,7 @@ class PageMessagerie(QWidget):
 
         l_common = QHBoxLayout()
         self.spin_sauts = QSpinBox()
-        self.spin_sauts.setRange(1, 1) # Mettre (1, 3) si tu as assez de routeurs
+        self.spin_sauts.setRange(1, 10) 
         self.spin_sauts.setPrefix("Circuit : ")
         self.spin_sauts.setSuffix(" rebonds")
         l_common.addWidget(QLabel("Complexité du trajet :"))
@@ -139,11 +138,11 @@ class PageMessagerie(QWidget):
         self.setLayout(mise_en_page_principal)
 
     def demarrer(self, ip, pr, pc):
-        self.lbl_statut.setText(f"Connecté - Passerelle: {ip}:{pr}")
+        self.lbl_statut.setText(f"Connecté via passerelle {ip}:{pr} | Mon Port: {pc}")
         try:
             self.client_backend = Client(ip, pr, pc)
             definir_callback_client(self.pont.nouveau_signal_log.emit)
-            self.get_annuaire()
+            threading.Timer(0.5, self.get_annuaire).start()
         except Exception as e:
             self.log_ui(f"[ERREUR] Impossible de lancer le backend : {e}")
 
@@ -162,7 +161,7 @@ class PageMessagerie(QWidget):
 
     def update_spinbox(self, n):
         self.spin_sauts.setMaximum(max(1, n))
-        self.spin_sauts.setValue(min(2, n))
+        self.spin_sauts.setValue(min(3, n))
         self.log_ui(f"Annuaire chargé : {n} nœuds disponibles.")
     
     def envoyer(self):
@@ -189,7 +188,7 @@ class PageMessagerie(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Messagerie Oignon")
+        self.setWindowTitle("Messagerie Oignon - Client Final")
         self.resize(700, 600)
         
         self.stack = QStackedWidget()

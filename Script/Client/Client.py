@@ -3,6 +3,7 @@ import threading
 import random
 import datetime
 import sys
+import time
 
 # Importation de ma classe de chiffrement RSA maison
 try:
@@ -32,7 +33,7 @@ def journalisation_log(qui, type_message, message):
             f.write(ligne_log + "\n")
     except: pass
 
- # Classe Client 
+# Classe Client 
 class Client:
     def __init__(self, routeur_ip, routeur_port, port_ecoute_local):
         self.Routeur_IP = routeur_ip
@@ -48,16 +49,30 @@ class Client:
         t = threading.Thread(target=self._ecouter_message_entrants, daemon=True)
         t.start()
 
+    def _recevoir_tout(self, sock):
+        contenu = b""
+        sock.settimeout(2.0)
+        try:
+            while True:
+                partie = sock.recv(8192)
+                if not partie: break
+                contenu += partie
+                if len(partie) < 8192:
+                    break
+        except: pass
+        return contenu
+
     def _ecouter_message_entrants(self):
         socketTCPentrant = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         socketTCPentrant.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             socketTCPentrant.bind(("0.0.0.0", self.Port_en_ecoute)) 
             socketTCPentrant.listen(5)
+            journalisation_log("CLIENT", "ECOUTE", f"Client prêt à recevoir sur le port {self.Port_en_ecoute}")
             while True:
                 try:
                     conn, addr = socketTCPentrant.accept()
-                    data = conn.recv(8192)
+                    data = self._recevoir_tout(conn)
                     if data:
                         message = data.decode('utf-8', errors='ignore')
                         journalisation_log("CLIENT", "RECEPTION", f"Message reçu : {message}")
@@ -69,19 +84,15 @@ class Client:
     def recuperer_annuaire_complet(self):
         try:
             socketTCPannuaire = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            socketTCPannuaire.settimeout(5)
+            socketTCPannuaire.settimeout(5.0)
             socketTCPannuaire.connect((self.Routeur_IP, self.Routeur_Port))
             socketTCPannuaire.sendall(b"REQ_LIST_KEYS")
-            
-            reponse = b""
-            while True:
-                partie = socketTCPannuaire.recv(4096)
-                if not partie: break
-                reponse += partie
+            reponse_bytes = self._recevoir_tout(socketTCPannuaire)
             socketTCPannuaire.close()
             
+            reponse = reponse_bytes.decode("utf-8")
             annuaire = {}
-            for ligne in reponse.decode("utf-8").split('\n'):
+            for ligne in reponse.split('\n'):
                 if "ID:" in ligne:
                     parties = ligne.replace('|', ';').split(';')
                     infos = {p.split(':')[0]: p.split(':')[1] for p in parties if ':' in p}
@@ -127,11 +138,14 @@ class Client:
         ids = list(self.annuaire_cache.keys())
         
         if len(ids) < nb_sauts: 
-            journalisation_log("CLIENT", "ERREUR", "Pas assez de routeurs disponibles.")
-            return "Erreur"
+            nb_sauts = len(ids)
+            journalisation_log("CLIENT", "INFO", f"Adaptation à {nb_sauts} sauts (max dispo).")
             
+        if nb_sauts == 0:
+             journalisation_log("CLIENT", "ERREUR", "Aucun routeur disponible.")
+             return "Erreur: Annuaire vide"
+
         dest_id = random.choice(ids)
-        
         relais_possibles = [i for i in ids if i != dest_id]
         chemin = random.sample(relais_possibles, min(nb_sauts-1, len(relais_possibles))) + [dest_id]
         
@@ -140,14 +154,16 @@ class Client:
             ip_dest, port_dest = cible 
             
             paquet = self.construire_oignon(message, chemin, self.annuaire_cache, "CLIENT", ip_dest, port_dest)
+            
             id_entree = chemin[0]
             ip_entree = self.annuaire_cache[id_entree]['ip']
             port_entree = self.annuaire_cache[id_entree]['port']
-            
-            socketTCPlog = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            socketTCPlog.connect((ip_entree, port_entree))
-            socketTCPlog.sendall(paquet.encode('utf-8'))
-            socketTCPlog.close()
+            socket_envoi = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            socket_envoi.settimeout(5.0) # 5s pour se connecter (réseau bridge parfois lent)
+            socket_envoi.connect((ip_entree, port_entree))
+            socket_envoi.sendall(paquet.encode('utf-8'))
+            time.sleep(0.1) # CRUCIAL : Flush du buffer avant fermeture
+            socket_envoi.close()
             
             journalisation_log("CLIENT", "ENVOI", f"Paquet expédié vers l'entrée {id_entree}")
             return "Succès"
