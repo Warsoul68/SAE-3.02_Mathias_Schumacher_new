@@ -131,12 +131,12 @@ class Routeur:
             journalisation_log(self.nom_log, "ERREUR", f"Analyse paquet : {e}")
 
     # Envoie de message
-    def construire_oignon(self, message, chemin_ids, annuaire, mode="ROUTEUR", ip_c=None, port_c=None):
+    def construire_oignon(self, message, chemin_ids, annuaire, mode="CLIENT", ip_c=None, port_c=None):
         id_sortie = chemin_ids[-1]
         cle_sortie = annuaire[id_sortie]['cle']
         
         if mode == "CLIENT":
-            header = f"RELAY:CLIENT:IP:{ip_c};PORT:{port_c}"
+            header = f"RELAY:CLIENT;IP:{ip_c};PORT:{port_c}"
         else:
             header = "DEST:FINAL"
             
