@@ -1,13 +1,12 @@
 import sys
 import threading
-import random
-# On importe la classe Routeur 
+import time
+
+# import de la classe Routeur 
 from Routeur import Routeur, journalisation_log
 
 def afficher_titre(port):
-    print("\n" + "="*50)
-    print(f"Noeud routeur hybride - port {port}")
-    print("="*50)
+    print(f"Noeud Routeur hybride - port {port}")
 
 def main():
     if len(sys.argv) < 2:
@@ -22,7 +21,6 @@ def main():
 
     nom_log = f"ROUTEUR_{port_local}"
 
-    # 2. Configuration Master
     ip_master = input("Entrez l'IP du Master (ex: 192.168.1.34) : ")
     port_master_in = input("Entrez le Port du Master (8080 par défaut) : ")
     port_master = int(port_master_in) if port_master_in else 8080
@@ -31,16 +29,17 @@ def main():
         mon_routeur = Routeur(port_local, ip_master, port_master)
         
         journalisation_log(nom_log, "SCRIPT", "Initialisation du thread d'écoute réseau...")
-        thread_serveur = threading.Thread(target=mon_routeur._module_ecoute_reseau, daemon=True)
+        thread_serveur = threading.Thread(target=mon_routeur.demarrer, daemon=True) # Utilise demarrer() qui lance l'écoute
         thread_serveur.start()
         
         afficher_titre(port_local)
+        time.sleep(0.5)
 
         while True:
-            print("\nMenu principal :")
+            print("\nMenu principal")
             print("1. S'inscrire & Sync Annuaire (Auto)")
             print("2. Afficher l'Annuaire local")
-            print("3. Envoyer un message")
+            print("3. Envoyer un message (Client)")
             print("0. Quitter")
             
             choix = input("\nAction > ").lower()
@@ -59,74 +58,29 @@ def main():
             elif choix == "3":
                 print("\nPréparation de l'envoie")
                 mon_routeur.client_recuperer_annuaire()
-                print("Rappel : Pour les échanges entre Routeurs, utilisez l'IP intnet (Ex: 10.0.x.x)")
                 
                 if not mon_routeur.annuaire:
-                    print("[!] Erreur : Annuaire vide.")
+                    print("[!] Erreur : Annuaire vide. Impossible de router.")
                     continue
                 
                 try:
                     target_port = int(input("Port de la cible : "))
                     
                     if target_port == port_local:
-                        print(f"\n[!] ERREUR : Le port {target_port} est votre propre port.")
+                        print(f"\nERREUR : Le port {target_port} est le vôtre !")
                         print("Impossible de s'envoyer un message à soi-même.")
                         continue
-                        
+                    
                     target_ip = input("IP de la cible : ")
                     msg = input("Message à envoyer : ")
                     nb_sauts = int(input("Nombre de relais (sauts) : ") or 1)
                     
-                    ids_dispos = list(mon_routeur.annuaire.keys())
-                    id_exit = random.choice(ids_dispos)
-                    relais_possibles = [i for i in ids_dispos if i != id_exit]
-                    
-                    chemin = random.sample(relais_possibles, min(nb_sauts-1, len(relais_possibles))) + [id_exit]
-                    
-                    journalisation_log(nom_log, "ENVOI", f"Préparation oignon vers {target_ip}:{target_port} via {chemin}")
-                    
-                    paquet = mon_routeur.construire_oignon(
-                        message=msg, 
-                        chemin_ids=chemin, 
-                        annuaire=mon_routeur.annuaire, 
-                        mode="CLIENT", 
-                        ip_c=target_ip, 
-                        port_c=target_port
-                    )
-                    
-                    premier_id = chemin[0]
-                    target_relais = mon_routeur.annuaire[premier_id]
-                    mon_routeur._envoyer_socket(target_relais['ip'], target_relais['port'], paquet)
-                    
-                    print(f"\n[OK] Message envoyé anonymement via le circuit : {chemin}")
+                    mon_routeur.envoyer_message_personnalise(target_ip, target_port, msg, nb_sauts)
                     
                 except ValueError:
-                    print("[!] Saisie invalide (le port et les sauts doivent être des nombres).")
+                    print("[!] Saisie invalide (Ports et sauts doivent être des chiffres).")
                 except Exception as e:
-                    print(f"[!] Erreur lors de l'envoi : {e}")
-                    journalisation_log(nom_log, "ERREUR", f"Échec envoi : {e}")
-                
-                try:
-                    journalisation_log(nom_log, "ENVOI", f"Préparation oignon vers {target_ip}:{target_port} via {chemin}")
-                    
-                    paquet = mon_routeur.construire_oignon(
-                        message=msg, 
-                        chemin_ids=chemin, 
-                        annuaire=mon_routeur.annuaire, 
-                        mode="CLIENT", 
-                        ip_c=target_ip, 
-                        port_c=target_port
-                    )
-                    
-                    premier_id = chemin[0]
-                    target_relais = mon_routeur.annuaire[premier_id]
-                    mon_routeur._envoyer_socket(target_relais['ip'], target_relais['port'], paquet)
-                    
-                    print(f"[OK] Message envoyé anonymement via le circuit : {chemin}")
-                    
-                except Exception as e:
-                    print(f"[!] Erreur lors de la préparation : {e}")
-                    journalisation_log(nom_log, "ERREUR", f"Échec préparation envoi : {e}")
+                    print(f"[!] Erreur inattendue : {e}")
 
             elif choix == "0":
                 journalisation_log(nom_log, "STOP", "Fermeture manuelle du nœud.")
@@ -135,7 +89,7 @@ def main():
 
     except KeyboardInterrupt:
         journalisation_log(nom_log, "STOP", "Interruption par l'utilisateur (Ctrl+C).")
-        print("\n[!] Interruption par l'utilisateur.")
+        print("\n[!] Arrêt demandé.")
     except Exception as e:
         journalisation_log(nom_log, "FATAL", f"Erreur critique : {e}")
         print(f"\n[!] Erreur fatale : {e}")
