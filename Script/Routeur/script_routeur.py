@@ -59,20 +59,25 @@ def main():
             elif choix == "3":
                 print("Actualisation de l'annuaire...")
                 mon_routeur.client_recuperer_annuaire()
+                print("Rappel : Pour les Routeurs, utilisez l'IP intnet (Ex: 10.0.x.x)")
                 
                 if not mon_routeur.annuaire:
-                    print("[!] Erreur : L'annuaire est vide ou le Master est injoignable.")
-                    journalisation_log(nom_log, "ERREUR", "Tentative d'envoi sans annuaire valide.")
+                    print("[!] Erreur : Annuaire vide.")
                     continue
                 
-                print("\nEnvoie")
-                target_ip = input("IP de la cible (Client ou Routeur) : ")
                 try:
                     target_port = int(input("Port de la cible : "))
+                    if target_port == port_local:
+                        print(f"\n[!] ERREUR : Le port {target_port} est votre propre port.")
+                        print("Impossible de s'envoyer un message à soi-même.")
+                        continue
+                        
+                    target_ip = input("IP de la cible : ")
+                    msg = input("Message : ")
+                    nb_sauts = int(input("Nombre de sauts : ") or 1)
+                    
                 except ValueError:
-                    print("[!] Port invalide.")
-                    continue
-                
+                    print("[!] Saisie invalide.")
                 msg = input("Message à envoyer : ")
                 try:
                     nb_sauts = int(input("Nombre de relais (sauts) : ") or 1)
