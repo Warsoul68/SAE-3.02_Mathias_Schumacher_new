@@ -23,6 +23,7 @@ def journalisation_log(qui, type_message, message):
     except Exception as e:
         print(f"Erreur d'écriture log : {e}")
 
+# Classe Client
 class Routeur:
     def __init__(self, port_local, ip_master, port_master):
         self.port_local = port_local
@@ -41,9 +42,8 @@ class Routeur:
     def demarrer(self):
         thread_ecoute = threading.Thread(target=self._module_ecoute_reseau, daemon=True)
         thread_ecoute.start()
-
         self._menu_interactif()
-
+    
     # Module réseaux
     def _module_ecoute_reseau(self):
         socketTCP_Routeur = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -79,7 +79,7 @@ class Routeur:
                 conn.close()
             except Exception as e:
                 pass
-
+    
     def _recevoir_tout(self, sock):
         contenu = b""
         sock.settimeout(2)
@@ -95,7 +95,6 @@ class Routeur:
         try:
             message_str = donnees_chiffrees.decode('utf-8')
 
-            # Déchiffrement RSA
             message_clair = self.crypto.dechiffrer(message_str)
 
             if not message_clair:
@@ -106,16 +105,25 @@ class Routeur:
 
             commande, reste_du_paquet = message_clair.split("|", 1)
             
+            # Routage vers un autre noeud
             if "NEXT_IP" in commande:
                 infos = self._parser_headers(commande)
                 journalisation_log(self.nom_log, "ROUTAGE", f"Relayage vers -> {infos['NEXT_IP']}:{infos['NEXT_PORT']}")
                 self._envoyer_socket(infos['NEXT_IP'], int(infos['NEXT_PORT']), reste_du_paquet)
 
+            # Sortie vers le client
             elif "RELAY:CLIENT" in commande:
                 infos = self._parser_headers(commande)
-                journalisation_log(self.nom_log, "SORTIE", f"Livraison à {infos['IP']}:{infos['PORT']}")
-                self._envoyer_socket(infos['IP'], int(infos['PORT']), reste_du_paquet)
+                dest_ip = infos['IP']
+                dest_port = int(infos['PORT'])
 
+                if dest_port == self.port_local:
+                    journalisation_log(self.nom_log, "Arrivé", f"Message reçu : {reste_du_paquet}")
+                else:
+                    journalisation_log(self.nom_log, "Sortie", f"Livraison à {dest_ip}:{dest_port}")
+                    self._envoyer_socket(dest_ip, dest_port, reste_du_paquet)
+
+            # Arrivée classique
             elif "DEST:FINAL" in commande:
                 journalisation_log(self.nom_log, "ARRIVEE", f"Message reçu : {reste_du_paquet}")
 
@@ -147,19 +155,26 @@ class Routeur:
         return paquet_chiffre
 
     def envoyer_message_depuis_routeur(self):
+        self.client_recuperer_annuaire()
+        
         if not self.annuaire:
-            print("[!] Annuaire vide. Synchronisez d'abord (Option 1).")
+            print("[!] Annuaire vide ou Master inaccessible.")
             return
 
         print("\nEnvoie depuis le routeur")
         target_ip = input("IP du destinataire (Client ou Routeur) : ")
-        target_port = int(input("Port du destinataire : "))
-        msg = input("Message : ")
-        nb_sauts = int(input("Nombre de routeurs relais : ") or 1)
-
+        try:
+            target_port = int(input("Port du destinataire : "))
+            msg = input("Message : ")
+            nb_sauts = int(input("Nombre de routeurs relais : ") or 1)
+        except ValueError:
+            print("Erreur de saisie.")
+            return
+        
         ids_dispos = list(self.annuaire.keys())
         exit_node_id = random.choice(ids_dispos)
         relais = [i for i in ids_dispos if i != exit_node_id]
+        
         chemin = random.sample(relais, min(nb_sauts-1, len(relais))) + [exit_node_id]
 
         paquet = self.construire_oignon(msg, chemin, self.annuaire, mode="CLIENT", ip_c=target_ip, port_c=target_port)
@@ -168,19 +183,20 @@ class Routeur:
             id_in = chemin[0]
             journalisation_log(self.nom_log, "ENVOI", f"Expédition via circuit {chemin}")
             self._envoyer_socket(self.annuaire[id_in]['ip'], self.annuaire[id_in]['port'], paquet)
+            print("[+] Message envoyé.")
         except Exception as e:
             print(f"Erreur d'envoi : {e}")
-
+    
     # Gestion master
     def client_inscription(self):
         try:
             e, n = self.crypto.publique
-            s_temp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            socket_temp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             try:
-                s_temp.connect((self.ip_master, self.port_master))
-                mon_ip = s_temp.getsockname()[0]
+                socket_temp.connect((self.ip_master, self.port_master))
+                mon_ip = socket_temp.getsockname()[0]
             except: mon_ip = "127.0.0.1"
-            finally: s_temp.close()
+            finally: socket_temp.close()
 
             requete = f"INSCRIPTION|{mon_ip}|{self.port_local}|{e},{n}"
             self._envoyer_socket(self.ip_master, self.port_master, requete)
@@ -193,11 +209,12 @@ class Routeur:
     
     def client_recuperer_annuaire(self):
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((self.ip_master, self.port_master))
-            s.sendall(b"REQ_LIST_KEYS")
-            reponse = self._recevoir_tout(s).decode('utf-8')
-            s.close()
+            socketTCPannuaire = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            socketTCPannuaire.settimeout(2) 
+            socketTCPannuaire.connect((self.ip_master, self.port_master))
+            socketTCPannuaire.sendall(b"REQ_LIST_KEYS")
+            reponse = self._recevoir_tout(socketTCPannuaire).decode('utf-8')
+            socketTCPannuaire.close()
             
             self.annuaire = {}
             for ligne in reponse.split('\n'):
@@ -208,7 +225,7 @@ class Routeur:
             journalisation_log(self.nom_log, "ANNUAIRE", f"{len(self.annuaire)} nœuds synchronisés.")
         except Exception as e:
             journalisation_log(self.nom_log, "ERREUR", f"Annuaire : {e}")
-
+    
     def _menu_interactif(self):
         while True:
             print(f"\n Routeur hybride {self.port_local} ---")

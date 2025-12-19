@@ -1,7 +1,7 @@
 import sys
 import threading
 import random
-# On importe le Routeur ET la fonction de log
+# On importe la classe Routeur 
 from Routeur import Routeur, journalisation_log
 
 def afficher_titre(port):
@@ -22,6 +22,7 @@ def main():
 
     nom_log = f"ROUTEUR_{port_local}"
 
+    # 2. Configuration Master
     ip_master = input("Entrez l'IP du Master (ex: 192.168.1.34) : ")
     port_master_in = input("Entrez le Port du Master (8080 par défaut) : ")
     port_master = int(port_master_in) if port_master_in else 8080
@@ -30,7 +31,6 @@ def main():
         mon_routeur = Routeur(port_local, ip_master, port_master)
         
         journalisation_log(nom_log, "SCRIPT", "Initialisation du thread d'écoute réseau...")
-        
         thread_serveur = threading.Thread(target=mon_routeur._module_ecoute_reseau, daemon=True)
         thread_serveur.start()
         
@@ -40,7 +40,7 @@ def main():
             print("\nMenu principal :")
             print("1. S'inscrire & Sync Annuaire (Auto)")
             print("2. Afficher l'Annuaire local")
-            print("3. ENVOYER UN MESSAGE")
+            print("3. Envoyer un message")
             print("0. Quitter")
             
             choix = input("\nAction > ").lower()
@@ -57,25 +57,34 @@ def main():
                         print(f" - ID {rid} : {info['ip']}:{info['port']}")
 
             elif choix == "3":
+                print("Actualisation de l'annuaire...")
+                mon_routeur.client_recuperer_annuaire()
+                
                 if not mon_routeur.annuaire:
-                    print("[!] Erreur : L'annuaire est nécessaire pour choisir des relais.")
-                    journalisation_log(nom_log, "ERREUR", "Tentative d'envoi sans annuaire.")
+                    print("[!] Erreur : L'annuaire est vide ou le Master est injoignable.")
+                    journalisation_log(nom_log, "ERREUR", "Tentative d'envoi sans annuaire valide.")
                     continue
                 
-                print("\nEnvoie :")
+                print("\nEnvoie")
                 target_ip = input("IP de la cible (Client ou Routeur) : ")
                 try:
                     target_port = int(input("Port de la cible : "))
-                except:
+                except ValueError:
                     print("[!] Port invalide.")
                     continue
                 
                 msg = input("Message à envoyer : ")
-                nb_sauts = int(input("Nombre de relais (sauts) : ") or 1)
+                try:
+                    nb_sauts = int(input("Nombre de relais (sauts) : ") or 1)
+                except ValueError:
+                    nb_sauts = 1
                 
                 ids_dispos = list(mon_routeur.annuaire.keys())
+                
                 id_exit = random.choice(ids_dispos)
+                
                 relais_possibles = [i for i in ids_dispos if i != id_exit]
+                
                 chemin = random.sample(relais_possibles, min(nb_sauts-1, len(relais_possibles))) + [id_exit]
                 
                 try:
@@ -95,6 +104,7 @@ def main():
                     mon_routeur._envoyer_socket(target_relais['ip'], target_relais['port'], paquet)
                     
                     print(f"[OK] Message envoyé anonymement via le circuit : {chemin}")
+                    
                 except Exception as e:
                     print(f"[!] Erreur lors de la préparation : {e}")
                     journalisation_log(nom_log, "ERREUR", f"Échec préparation envoi : {e}")
