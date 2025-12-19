@@ -156,16 +156,24 @@ class Client:
             paquet = self.construire_oignon(message, chemin, self.annuaire_cache, "CLIENT", ip_dest, port_dest)
             
             id_entree = chemin[0]
-            ip_entree = self.annuaire_cache[id_entree]['ip']
-            port_entree = self.annuaire_cache[id_entree]['port']
+            info_entree = self.annuaire_cache[id_entree]
+            
+            if info_entree['port'] == self.Routeur_Port:
+                ip_connexion = self.Routeur_IP
+                journalisation_log("CLIENT", "ROUTAGE", "Utilisation de l'interface locale (Intnet) pour l'entrée.")
+            else:
+                ip_connexion = info_entree['ip']
+                journalisation_log("CLIENT", "ROUTAGE", f"Utilisation de l'interface publique (Bridge) pour l'entrée via {ip_connexion}")
+
+            port_connexion = info_entree['port']
             socket_envoi = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            socket_envoi.settimeout(5.0) # 5s pour se connecter (réseau bridge parfois lent)
-            socket_envoi.connect((ip_entree, port_entree))
+            socket_envoi.settimeout(5.0)
+            socket_envoi.connect((ip_connexion, port_connexion))
             socket_envoi.sendall(paquet.encode('utf-8'))
-            time.sleep(0.1) # CRUCIAL : Flush du buffer avant fermeture
+            time.sleep(0.1) 
             socket_envoi.close()
             
-            journalisation_log("CLIENT", "ENVOI", f"Paquet expédié vers l'entrée {id_entree}")
+            journalisation_log("CLIENT", "ENVOI", f"Paquet expédié vers l'entrée {id_entree} à l'adresse {ip_connexion}")
             return "Succès"
 
         except Exception as e:
