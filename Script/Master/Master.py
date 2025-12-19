@@ -3,6 +3,7 @@ import threading
 import mysql.connector
 import datetime
 import sys
+import time  # AJOUTÉ : Indispensable pour la stabilité réseau
 
 # Gestion du lien avec l'interface graphique
 CALLBACK_LOG_GUI = None
@@ -15,16 +16,13 @@ def journalisation_log(qui, type_message, message):
     maintenant = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     ligne_log = f"[{maintenant}] [{qui}] [{type_message}] {message}"
     
-    # 1. Affichage Console classique
     print(ligne_log)
 
-    # 2. Envoi à l'interface graphique (si elle existe)
     if CALLBACK_LOG_GUI:
         try:
             CALLBACK_LOG_GUI(ligne_log)
         except: pass
 
-    # 3. Sauvegarde fichier
     nom_fichier = f"journal_{qui.lower()}.log"
     try:
         with open(nom_fichier, "a", encoding="utf-8") as f:
@@ -36,7 +34,7 @@ def journalisation_log(qui, type_message, message):
 class Master:
     def __init__(self, port_tcp, db_host="localhost", db_user="root", db_password="toto", db_database="Routagedb", port_udp=50000):
         
-        # Configuration
+        # Configuration BDD
         self.db_config = {
             "host": db_host,
             "user": db_user, 
@@ -52,7 +50,7 @@ class Master:
     def demarrer_ecoute(self):
         self._demarrer_services()
 
-    # Gestion de la base de données
+    # Gestion BDD
     def _get_db_connection(self):
         try:
             return mysql.connector.connect(**self.db_config)
@@ -130,17 +128,29 @@ class Master:
             finally:
                 conn.close()
         return "0"
-    
-    # Gestion réseau
+
+    def _recevoir_tout(self, sock):
+        contenu = b""
+        sock.settimeout(2.0)
+        try:
+            while True:
+                partie = sock.recv(8192)
+                if not partie: break
+                contenu += partie
+                if len(partie) < 8192:
+                    break
+        except: pass
+        return contenu
+
     def _handle_client(self, conn, addr):
         journalisation_log("MASTER", "CONNEXION", f"Nouvelle connexion de {addr[0]}")
         try:
             while True:
-                data = conn.recv(8192)
-                if not data: break
-                message = data.decode().strip()
+                data = self._recevoir_tout(conn)
                 
-                # Gestion du format pip (|)
+                if not data: break
+                message = data.decode('utf-8', errors='ignore').strip()
+                
                 if "|" in message and "REQ" not in message and "INSCRIPTION" in message:
                     try:
                         parties = message.split('|')
@@ -152,29 +162,16 @@ class Master:
                             nouvelle_id = self.enregistrer_ou_mettre_a_jour_routeur(ip_r, port_r, cle_r)
                             if nouvelle_id:
                                 conn.sendall(f"ACK|{nouvelle_id}".encode())
+                                time.sleep(0.1)
                             else:
                                 conn.sendall(b"NACK")
                     except Exception as e:
                         journalisation_log("MASTER", "ERREUR", f"Format invalide pour {addr[0]}: {e}")
                         conn.sendall(b"Erreur de format")
 
-                elif message == "REQ_LIST_IDS":
-                  conn_bdd = self._get_db_connection()
-                  if conn_bdd:
-                        try:
-                            cursor = conn_bdd.cursor()
-                            cursor.execute("SELECT id FROM TableRoutage")
-                            res = cursor.fetchall()
-                            reponse = "|".join([f"ID:{r[0]}" for r in res])
-                            conn.sendall(reponse.encode())
-                        except Exception as e:
-                            journalisation_log("MASTER", "ERREUR", f"Erreur LIST_IDS : {e}")
-                            conn.sendall(b"ERROR")
-                        finally:
-                            conn_bdd.close()
-
+                # Demande Annuaire
                 elif message == "REQ_LIST_KEYS" or message == "ANNUAIRE|GET":
-                    journalisation_log("MASTER", "ANNUAIRE", f"Envoi de l'annuaire à {addr[0]}")
+                    journalisation_log("MASTER", "ANNUAIRE", f"Envoi de l'annuaire complet à {addr[0]}")
                     conn_bdd = self._get_db_connection()
                     if conn_bdd:
                         cursor = conn_bdd.cursor()
@@ -187,41 +184,19 @@ class Master:
                             items.append(f"ID:{rid};IP:{rip};PORT:{rport};KEY:{rcle}")
                         reponse = "\n".join(items)
                         conn.sendall(reponse.encode())
-                        
-                elif message.startswith("REQ_RESOLVE_ID"):
-                    try:
-                        parties = message.split('|')
-                        if len(parties) < 2:
-                            conn.sendall(b"ERROR")
-                            continue
-                            
-                        id_cible = (parties[1])
-                        
-                        conn_bdd = self._get_db_connection()
-                        if conn_bdd:
-                            try:
-                                cursor = conn_bdd.cursor()
-                                cursor.execute("SELECT ip, port FROM TableRoutage WHERE id = %s", (id_cible,))
-                                res = cursor.fetchone()
-                                
-                                if res:
-                                    reponse = f"{res[0]}|{res[1]}"
-                                    conn.sendall(reponse.encode())
-                                else:
-                                    conn.sendall(b"ERROR")
-                            finally:
-                                conn_bdd.close()
-                    except Exception as e:
-                        journalisation_log("MASTER", "ERREUR", f"Erreur RESOLVE_ID : {e}")
-                        conn.sendall(b"ERROR")
+                        time.sleep(0.2)
+
+                # Demande Nombre
                 elif message == "REQ_NB_ROUTEURS":
                     nb = self.compter_routeurs()
                     conn.sendall(nb.encode())
+                    time.sleep(0.1)
+
         except Exception as e:
             journalisation_log("MASTER", "ERREUR", f"Erreur Client {addr}: {e}")
         finally:
             conn.close()
-    
+
     def _lancement_service_decouverte(self):
         socketUDP = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         socketUDP.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

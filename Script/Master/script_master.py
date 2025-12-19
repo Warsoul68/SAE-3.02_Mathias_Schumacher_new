@@ -1,5 +1,4 @@
 import sys
-import datetime
 import threading
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
@@ -8,22 +7,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import pyqtSignal, QObject, Qt
 
-try:
-    from Master import Master, definir_callback_gui
-except ImportError:
-    print("ERREUR : Master.py est introuvable dans le répertoire courant !")
-    sys.exit()
-
-import sys
-import datetime
-import threading
-from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QTextEdit, QGroupBox,
-    QStackedWidget, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QMainWindow
-)
-from PyQt5.QtCore import pyqtSignal, QObject, Qt
-
+# Importation sécurisée
 try:
     from Master import Master, definir_callback_gui
 except ImportError:
@@ -33,7 +17,7 @@ except ImportError:
 class LogBridge(QObject):
     nouveau_signal_log = pyqtSignal(str)
 
-# Configurattion du port TCP
+# Configuration du port TCP
 class PagePort(QWidget):
     port_valide = pyqtSignal(int)
 
@@ -46,7 +30,7 @@ class PagePort(QWidget):
         titre.setStyleSheet("font-size: 24px; font-weight: bold; color: #1E88E5; margin-bottom: 20px;")
         mise_en_page.addWidget(titre)
 
-        self.input_port = QLineEdit("8080")
+        self.input_port = QLineEdit("6000")
         self.input_port.setPlaceholderText("Port TCP")
         self.input_port.setFixedWidth(250)
         self.input_port.setStyleSheet("padding: 10px; font-size: 16px; border-radius: 5px; border: 1px solid #CCC;")
@@ -69,7 +53,7 @@ class PagePort(QWidget):
             self.port_valide.emit(port)
         except ValueError:
             QMessageBox.warning(self, "Erreur", "Veuillez entrer un numéro de port valide.")
-
+    
 # Tableau de bord 
 class PageDashboard(QWidget):
     def __init__(self):
@@ -96,12 +80,11 @@ class PageDashboard(QWidget):
         self.table.setStyleSheet("background-color: white; gridline-color: #ccc;")
         mise_en_page_table.addWidget(self.table)
         
-        # Boutons d'action
         layout_boutons = QHBoxLayout()
-        self.btn_refresh = QPushButton("🔄 Actualiser la liste")
+        self.btn_refresh = QPushButton("Actualiser la liste")
         self.btn_refresh.clicked.connect(self.charger_donnees_bdd)
         
-        self.btn_clear = QPushButton("🗑️ Vider les logs")
+        self.btn_clear = QPushButton("Vider les logs")
         self.btn_clear.clicked.connect(lambda: self.console.clear())
         
         layout_boutons.addWidget(self.btn_refresh)
@@ -187,7 +170,8 @@ class MasterApp(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    app.setStyle("Fusion") # Style moderne et propre
+    app.setStyle("Fusion") 
     fenetre = MasterApp()
     fenetre.show()
     sys.exit(app.exec_())
+    
