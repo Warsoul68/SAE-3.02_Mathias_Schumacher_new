@@ -39,9 +39,13 @@ class PageConfig(QWidget):
         formulaire = QFormLayout()
         
         self.input_ip = QLineEdit("192.168.1.X")
-        self.input_ip.setPlaceholderText("IP du Routeur/Relais Linux")
+        self.input_ip.setPlaceholderText("Ex: 10.0.x.x (VM) ou 192.168.x.x (PC)")
         self.input_pr = QLineEdit("8080")
         self.input_pc = QLineEdit("9000")
+
+        lbl_aide = QLabel("<b>Aide :</b> Si votre Windows est en réseau 'intnet', ""utilisez l'IP interne du routeur.")
+        lbl_aide.setWordWrap(True)
+        lbl_aide.setStyleSheet("color: #555; font-size: 10px; margin-top: 5px;")
 
         formulaire.addRow("IP Passerelle :", self.input_ip)
         formulaire.addRow("Port Passerelle :", self.input_pr)
@@ -49,6 +53,11 @@ class PageConfig(QWidget):
 
         groupe.setLayout(formulaire)
         mise_en_page.addWidget(groupe)
+
+        aide_groupe = QVBoxLayout()
+        aide_groupe.addLayout(formulaire)
+        aide_groupe.addWidget(lbl_aide)
+        groupe.setLayout(aide_groupe)
 
         btn = QPushButton("Démarrer le Client")
         btn.setStyleSheet("background-color: #2196F3; color: white; padding: 12px; font-weight: bold; border-radius: 5px;")
@@ -95,7 +104,7 @@ class PageMessagerie(QWidget):
 
         formulaire_dest = QFormLayout()
         self.in_dest_ip = QLineEdit()
-        self.in_dest_ip.setPlaceholderText("IP de la cible (ex: 192.168.1.50)")
+        self.in_dest_ip.setPlaceholderText("IP de la cible (Ex: 10.0.x.x (VM ou routeur) ou 192.168.x.x (PC))")
         self.in_dest_port = QLineEdit("9000")
         formulaire_dest.addRow("IP Destinataire :", self.in_dest_ip)
         formulaire_dest.addRow("Port Destinataire :", self.in_dest_port)
@@ -112,8 +121,8 @@ class PageMessagerie(QWidget):
 
         l_msg = QHBoxLayout()
         self.in_msg = QLineEdit()
-        self.in_msg.setPlaceholderText("Écrivez votre message secret...")
-        self.btn_send = QPushButton("ENVOYER")
+        self.in_msg.setPlaceholderText("Écrivez votre message")
+        self.btn_send = QPushButton("Envoyer")
         self.btn_send.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 8px;")
         self.btn_send.clicked.connect(self.envoyer)
         l_msg.addWidget(self.in_msg)
