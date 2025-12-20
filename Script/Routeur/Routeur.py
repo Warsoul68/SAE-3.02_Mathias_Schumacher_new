@@ -158,29 +158,35 @@ class Routeur:
 
         return paquet_chiffre
     
-    def envoyer_message_personnalise(self, target_ip, target_port, msg, nb_sauts):
+    def envoyer_message_personnalise(self, ip_cible, port_cible, message, nb_sauts):
         self.client_recuperer_annuaire()
-        if not self.annuaire:
-            print("[!] Annuaire vide.")
+        ids_disponibles = list(self.annuaire.keys())
+
+        mon_id = next((rid for rid, info in self.annuaire.items() if info['port'] == self.port_local), None)
+        id_cible = next((rid for rid, info in self.annuaire.items() if info['ip'] == ip_cible and info['port'] == port_cible), None)
+        choix_entree = [rid for rid in ids_disponibles if rid != mon_id and rid != id_cible]
+
+        if not choix_entree:
+            print(f"[!] Erreur : Pas assez de routeurs intermédiaires disponibles (Cible ou Soi-même sont les seuls choix).")
             return
 
-        ids_dispos = list(self.annuaire.keys())
-        if len(ids_dispos) < nb_sauts:
-            nb_sauts = len(ids_dispos)
-            print(f"[i] Ajustement automatique à {nb_sauts} sauts.")
+        premier_saut = random.choice(choix_entree)
+        reste_du_monde = [rid for rid in ids_disponibles if rid != premier_saut]
+        taille_reste = min(nb_sauts - 1, len(reste_du_monde))
+        
+        if taille_reste > 0:
+            suite_chemin = random.sample(reste_du_monde, taille_reste)
+            chemin = [premier_saut] + suite_chemin
+        else:
+            chemin = [premier_saut]
 
-        exit_node_id = random.choice(ids_dispos)
-        relais = [i for i in ids_dispos if i != exit_node_id]
-        chemin = random.sample(relais, min(nb_sauts-1, len(relais))) + [exit_node_id]
-        paquet = self.construire_oignon(msg, chemin, self.annuaire, mode="CLIENT", ip_c=target_ip, port_c=target_port)
+        print(f"[+] Circuit généré : {chemin} (Entrée sécurisée via {premier_saut})")
 
-        try:
-            id_in = chemin[0]
-            journalisation_log(self.nom_log, "ENVOI", f"Expédition via circuit {chemin}")
-            self._envoyer_socket(self.annuaire[id_in]['ip'], self.annuaire[id_in]['port'], paquet)
-            print(f"[OK] Message parti vers le premier nœud {id_in}")
-        except Exception as e:
-            print(f"Erreur d'envoi : {e}")
+        paquet = self.construire_oignon(message, chemin, self.annuaire, mode="CLIENT", ip_c=ip_cible, port_c=port_cible)
+
+        info_premier = self.annuaire[premier_saut]
+        print(f"[->] Envoi du paquet vers le premier saut : {info_premier['ip']}:{info_premier['port']}")
+        self._envoyer_socket(info_premier['ip'], info_premier['port'], paquet)
     
     # Inscription
     def client_inscription(self):
