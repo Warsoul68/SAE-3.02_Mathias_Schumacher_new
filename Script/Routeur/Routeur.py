@@ -161,17 +161,24 @@ class Routeur:
     def envoyer_message_personnalise(self, ip_cible, port_cible, message, nb_sauts):
         self.client_recuperer_annuaire()
         ids_disponibles = list(self.annuaire.keys())
+        
+        if not ids_disponibles:
+            print("[!] Erreur : Aucun routeur disponible dans l'annuaire.")
+            return
 
         mon_id = next((rid for rid, info in self.annuaire.items() if info['port'] == self.port_local), None)
         id_cible = next((rid for rid, info in self.annuaire.items() if info['ip'] == ip_cible and info['port'] == port_cible), None)
-        choix_entree = [rid for rid in ids_disponibles if rid != mon_id and rid != id_cible]
+        choix_entree_strict = [rid for rid in ids_disponibles if rid != mon_id and rid != id_cible]
+        
+        premier_saut = None
 
-        if not choix_entree:
-            print(f"[!] Erreur : Pas assez de routeurs intermédiaires disponibles (Cible ou Soi-même sont les seuls choix).")
-            return
-
-        premier_saut = random.choice(choix_entree)
+        if choix_entree_strict:
+            premier_saut = random.choice(choix_entree_strict)
+        else:
+            print(f"Attention : Réseau trop petit pour exclusion stricte. Passage en mode dégradé (Test).")
+            premier_saut = random.choice(ids_disponibles)
         reste_du_monde = [rid for rid in ids_disponibles if rid != premier_saut]
+
         taille_reste = min(nb_sauts - 1, len(reste_du_monde))
         
         if taille_reste > 0:
@@ -180,13 +187,20 @@ class Routeur:
         else:
             chemin = [premier_saut]
 
-        print(f"[+] Circuit généré : {chemin} (Entrée sécurisée via {premier_saut})")
+        print(f"[+] Circuit généré ({len(chemin)} sauts) : {chemin}")
 
-        paquet = self.construire_oignon(message, chemin, self.annuaire, mode="CLIENT", ip_c=ip_cible, port_c=port_cible)
+        try:
+            paquet = self.construire_oignon(message, chemin, self.annuaire, mode="CLIENT", ip_c=ip_cible, port_c=port_cible)
+        except Exception as e:
+            print(f"[!] Erreur lors de la construction de l'oignon : {e}")
+            return
 
-        info_premier = self.annuaire[premier_saut]
-        print(f"[->] Envoi du paquet vers le premier saut : {info_premier['ip']}:{info_premier['port']}")
-        self._envoyer_socket(info_premier['ip'], info_premier['port'], paquet)
+        if premier_saut in self.annuaire:
+            info_premier = self.annuaire[premier_saut]
+            print(f"[->] Envoi du paquet chiffré vers le premier saut : {info_premier['ip']}:{info_premier['port']}")
+            self._envoyer_socket(info_premier['ip'], info_premier['port'], paquet)
+        else:
+            print(f"[!] Erreur : Le premier saut {premier_saut} n'est plus dans l'annuaire.")
     
     # Inscription
     def client_inscription(self):
