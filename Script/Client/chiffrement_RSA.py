@@ -76,7 +76,6 @@ class CryptoManager:
         print("[Crypto] Génération nouvelle paire RSA...")
         self.publique, self.privee = generer_paire_cle()
 
-        # CODE AMÉLIORÉ (dans charger_ou_generer, section écriture)
         with open(self.c_pub, "w") as f:
             f.write(f"{self.publique[0]},{self.publique[1]}")
 
