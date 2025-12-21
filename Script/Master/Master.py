@@ -2,8 +2,7 @@ import socket
 import threading
 import mysql.connector
 import datetime
-import sys
-import time  # AJOUTÉ : Indispensable pour la stabilité réseau
+import time
 
 # Gestion du lien avec l'interface graphique
 CALLBACK_LOG_GUI = None
