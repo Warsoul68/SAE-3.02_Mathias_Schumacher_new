@@ -69,10 +69,7 @@
             <depend id="14" type="2" difference="0" hardness="Strong"/>
         </task>
         <task id="14" uid="a0ab43c6d0334af3beb47c7ef12db4a6" name="Rédaction de la documentation de réponse au cahier des charge" meeting="false" start="2025-12-20" duration="3" complete="100" priority="2" expand="true"/>
-        <task id="23" uid="d30ca1af55ec455f94c6f5d89b130fc0" name="Rediger le readme et le fichier d'installation" meeting="false" start="2025-12-27" duration="1" complete="0" expand="true">
-            <depend id="16" type="2" difference="0" hardness="Strong"/>
-        </task>
-        <task id="16" uid="859aaf0e819c4872a53a1acb1c27278e" name="Faire la vidéo de démonstration" meeting="false" start="2025-12-28" duration="1" complete="0" priority="2" expand="true">
+        <task id="23" uid="d30ca1af55ec455f94c6f5d89b130fc0" name="Rediger le readme et le fichier d'installation + faire la vidéo de démonstration" meeting="false" start="2025-12-27" duration="2" complete="33" expand="true">
             <depend id="18" type="2" difference="0" hardness="Strong"/>
         </task>
         <task id="18" uid="c9dce3b93c54475c9a69431a7b5b3638" name="Faire la fiche individuelle" meeting="false" start="2025-12-29" duration="1" complete="0" expand="true">
