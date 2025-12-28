@@ -1,5 +1,7 @@
 SAE 3.02 : Conception d'une architecture distribuée avec routage en oignon
 
+Note : pour la documentation et les fichier d'installation je vous conseille de consulter les pdf
+
 1. présentation du projet :
    le projet s'inscrit dans le cadre de la SAE 3.02 et a pour objectif de développer un système de messagerie sécurisé et anonyme basé sur le protocole de routage en oignon. L'enjeu principal est de garantir la confidentialité et l'anonymat total des échanges entre deux utilisateurs (Client A et Client B).
    Le mécanisme de l'oignon :
@@ -21,15 +23,17 @@ SAE 3.02 : Conception d'une architecture distribuée avec routage en oignon
 
           Le Master est le pilier central de l'architecture. Il agit comme un "chef de gare"
 et un annuaire dynamique pour l'ensemble du réseau. Ses principales missions sont :
-- Gestion de la Base de Données : Il utilise MariaDB pour recenser et stocker
-les informations vitales des routeurs actifs (Adresses IP, ports et clés publiques RSA).
+
+* Gestion de la Base de Données : Il utilise MariaDB pour recenser et stocker
+  les informations vitales des routeurs actifs (Adresses IP, ports et clés publiques RSA).
 
  		- Nettoyage du Réseau : À chaque démarrage, le Master réinitialise la table de routage pour garantir que seuls
 les nœuds réellement connectés sont proposés aux clients.
 
  		- Protocoles de Communication :
-- UDP : Utilisé pour le service de découverte rapide ("Plug \& Play") et pour l'envoi de statistiques légères,
-comme le nombre de routeurs en ligne.
+
+* UDP : Utilisé pour le service de découverte rapide ("Plug \& Play") et pour l'envoi de statistiques légères,
+  comme le nombre de routeurs en ligne.
 
  			- TCP : Réservé aux échanges de données fiables, notamment pour l'inscription des routeurs et
 la diffusion de l'annuaire complet aux clients.
@@ -97,7 +101,8 @@ réactif et de recevoir des messages ou des confirmations en retour tout en pré
  		- Hyperviseur (Logiciel de virtualisation) : VirtualBox est recommandé pour gérer les segments réseaux Bridge et Intnet.
 
  				- lien : https://www.virtualbox.org/wiki/Downloads
-- ISO Debian 12 : Utilisé pour les VM Master et les Routeurs.
+
+* ISO Debian 12 : Utilisé pour les VM Master et les Routeurs.
 
  				- lien : https://lecrabeinfo.net/telecharger/debian-12-64-bits/
 
@@ -108,13 +113,14 @@ réactif et de recevoir des messages ou des confirmations en retour tout en pré
 
 
 3.2. Environnement de développement Python :
-- Python 3.x : Doit être installé sur toutes les machines.
+
+* Python 3.x : Doit être installé sur toutes les machines.
 
  				- lien : https://www.python.org/downloads/
 
 \- Git : doit être installer sur le pc physique et la VM windows 10
 
-&nbsp;				- lien : https://git-scm.com/install/windows
+ 				- lien : https://git-scm.com/install/windows
 
 \- Éditeur de code / IDE : Visual Studio Code est recommandé pour l'édition des scripts sous Windows.
 
@@ -128,11 +134,11 @@ Certains services spécifiques doivent être installés sur les machines Debian 
 
  		- MariaDB : Indispensable sur la VM Master pour stocker l'annuaire des routeurs.
 
- 		- iptables : Requis sur les VM Routeurs pour configurer les règles de routage et l'accès Internet entre les interfaces 
+ 		- iptables : Requis sur les VM Routeurs pour configurer les règles de routage et l'accès Internet entre les interfaces
 
 réseau.
 
-&nbsp;		- iptables-persistent : pour pouvoir sauvegarder ces paramètre iptables définitivement
+ 		- iptables-persistent : pour pouvoir sauvegarder ces paramètre iptables définitivement
 
 
 
