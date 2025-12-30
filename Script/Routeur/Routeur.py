@@ -99,6 +99,10 @@ class Routeur:
     # Analyse et routage
     def _analyser_paquet(self, donnees_chiffrees):
         try:
+            message_crypte_recu = donnees_chiffrees.decode('utf-8', errors='ignore').strip()
+            
+            journalisation_log(self.nom_log, "ANONYMAT", f"Flux entrant chiffré (Illisible) : {message_crypte_recu[:60]}...")
+
             message_str = donnees_chiffrees.decode('utf-8', errors='ignore').strip()
             message_clair = self.crypto.dechiffrer(message_str)
 
