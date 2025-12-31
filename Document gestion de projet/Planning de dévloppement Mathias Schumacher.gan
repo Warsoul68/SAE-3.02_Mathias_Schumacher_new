@@ -75,7 +75,7 @@
         <task id="18" uid="c9dce3b93c54475c9a69431a7b5b3638" name="Faire vidéo démonstration" meeting="false" start="2025-12-29" duration="1" complete="100" expand="true">
             <depend id="22" type="2" difference="0" hardness="Strong"/>
         </task>
-        <task id="22" uid="88b0adec65c74bb8abc5cf5c4a4ebdf5" name="Faire la fiche individuelle plus recettage" meeting="false" start="2025-12-30" duration="1" complete="50" expand="true"/>
+        <task id="22" uid="88b0adec65c74bb8abc5cf5c4a4ebdf5" name="Faire la fiche individuelle plus recettage" meeting="false" start="2025-12-30" duration="2" complete="100" expand="true"/>
         <task id="17" uid="4fa8b499cfe6414899539df6e3d870df" name="Rendre le code + la documentation" meeting="true" start="2025-12-31" duration="0" complete="0" priority="4" expand="true"/>
     </tasks>
     <resources/>
